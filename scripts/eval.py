@@ -28,8 +28,8 @@ def main():
         if not ok:
             failed.append(pkg)
     total = len(data["expected_flags"])
-    print(f"\nEnd-to-end success: {passed}/{total} (target: at least 9/{total})")
-    return 0 if passed >= 9 else 1
+    print(f"\nEnd-to-end success: {passed}/{total} (regression gate: all packages pass)")
+    return 0 if total > 0 and not failed else 1
 
 
 if __name__ == "__main__":

@@ -30,6 +30,8 @@ FIELD_PATTERNS = {
     "payoff": r"^payoff amount:\s*\$?([\d,]+\.\d{2})\s*$",
     "issued": r"^(?:issue date|pay date|statement date):\s*(\d{4}-\d{2}-\d{2})\s*$",
     "expires": r"^expires:\s*(\d{4}-\d{2}-\d{2})\s*$",
+    # Keep blank/malformed dates visible so the checker cannot fall back silently.
+    "good_through": r"^good[ -]through(?: date)?:\s*(.*)$",
 }
 
 
@@ -75,14 +77,20 @@ def extract(text: str) -> dict:
     for line_no, line in enumerate(text.splitlines(), start=1):
         for field, pat in FIELD_PATTERNS.items():
             m = re.match(pat, line.strip(), re.IGNORECASE)
+            if m and field == "good_through" and field in out:
+                out[field] = {"value": None,
+                              "evidence": out[field]["evidence"] + f"; line {line_no}: {line.strip()}"}
+                continue
             if m and field not in out:
                 raw = m.group(1).strip()
                 value = raw
-                if field in ("issued", "expires"):
+                if field in ("issued", "expires", "good_through"):
                     try:
                         value = date.fromisoformat(raw)
                     except ValueError:
-                        continue
+                        if field != "good_through":
+                            continue
+                        value = None
                 out[field] = {"value": value, "evidence": f"line {line_no}: {line.strip()}"}
     return out
 

@@ -15,7 +15,6 @@ REQUIRED_DOCS = ["photo_id", "pay_stub", "vehicle_registration", "payoff_letter"
 # Max age in days, counted from the document's issue date (assumption)
 MAX_AGE_DAYS = {
     "pay_stub": 30,
-    "payoff_letter": 10,
 }
 
 # Documents with an expiry date that must still be valid (assumption)
@@ -33,6 +32,19 @@ def check(results: dict, as_of: date) -> list[dict]:
         fields = results.get(doc)
         if fields is None:
             rows.append({"doc": doc, "status": "missing", "rule": "required document"})
+            continue
+        if doc == "payoff_letter":
+            good_through = fields.get("good_through")
+            issued = fields.get("issued")
+            if not isinstance(good_through, date):
+                status, rule = "unreadable", "needs one unambiguous good-through date; rep review required"
+            elif issued is not None and (issued > as_of or good_through < issued):
+                status, rule = "unreadable", "inconsistent payoff dates; rep review required"
+            elif good_through < as_of:
+                status, rule = "stale", f"good-through date passed ({good_through.isoformat()})"
+            else:
+                status, rule = "ok", f"valid through {good_through.isoformat()} (inclusive; demo assumption)"
+            rows.append({"doc": doc, "status": status, "rule": rule})
             continue
         if doc in EXPIRES:
             exp = fields.get("expires")

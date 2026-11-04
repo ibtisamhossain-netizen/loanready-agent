@@ -25,6 +25,20 @@
     "pkg09": {
       "vehicle_registration": "expired"
     },
-    "pkg10": {}
+    "pkg10": {},
+    "pkg11": {
+      "payoff_letter": "stale"
+    },
+    "pkg12": {
+      "payoff_letter": "unreadable"
+    },
+    "pkg13": {
+      "payoff_letter": "unreadable"
+    },
+    "pkg14": {},
+    "pkg15": {
+      "payoff_letter": "unreadable"
+    },
+    "pkg16": {}
   }
 }

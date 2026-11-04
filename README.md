@@ -20,7 +20,9 @@ Sources and demo tests for each story are in [docs/user-stories.md](docs/user-st
 
 ## Setup
 
-Copy `.env.example` to `.env` and add your own API key. `.env` is in `.gitignore` and must never be committed.
+For offline tests, create a virtual environment with `python3 -m venv .venv`, then install pytest with `.venv/bin/python -m pip install -r requirements-dev.txt`. Use `.venv/bin/python` for the commands below.
+
+Copy `.env.example` to `.env` locally if needed. `.env` is in `.gitignore` and must never be committed. Offline mode needs no key. The optional live planner reads environment variables; it does not load `.env` automatically.
 
 ## Docs
 
@@ -41,7 +43,9 @@ Story 1 (catch missing, expired, or stale documents during the visit) is built f
 These are working guesses so the build can move. Each one gets replaced when MCU or Priscilla's research confirms the real answer.
 
 - The required documents for an auto refinance are photo ID, pay stub, vehicle registration, and a payoff letter from the current lender.
-- A pay stub counts as stale after 30 days and a payoff letter after 10 days, both counted from the issue date.
+- A pay stub counts as stale after 30 days from its issue date.
+- A payoff letter uses its explicit good-through date, not a guessed 10-day issue-age limit. The demo treats that date as inclusive at date-only granularity; MCU must confirm cutoff times and actual policy.
+- Missing, blank, invalid, ambiguous, or repeated good-through dates require rep review (`unreadable`). No guessed date and no fallback to issue age. The original source line is retained. An issue date in the future or after the good-through date also requires review.
 - Photo ID and registration only need to be unexpired on the day of the check.
 - A document with no readable date is flagged "unreadable" for the rep to check, never passed.
 - The check runs against the date of the visit, so a file that passes today can go stale later.
@@ -65,12 +69,16 @@ The offline `RulePlanner` is used for tests and evals. `ClaudePlanner` asks the 
 ## Running it
 
 ```
-python3 scripts/make_synthetic.py   # build the 10 synthetic packages
+python3 scripts/make_synthetic.py   # build the 16 synthetic packages
 python3 scripts/eval.py             # end-to-end eval against the labels
 python3 -m pytest -q tests          # safety and loop tests
 ```
 
-Current result: 10 of 10 synthetic packages flagged correctly, 7 of 7 tests passing. The rules and the labels were written by the same person, so this checks that the loop works, not real-world accuracy. Real accuracy needs MCU's checklist and documents labeled by someone else.
+The evaluation now includes the original 10 synthetic packages plus six payoff-date regression packages. The regression gate requires every package to pass. The rules and the labels were written together, so this checks loop behavior, not real-world accuracy. Real accuracy needs MCU's checklist and documents labeled by someone else.
+
+The added cases cover a nine-day-old letter with an expired good-through date, ambiguous and blank dates, an invalid calendar date, validity ending today, and an older letter with an explicit later validity date. Unit tests also cover missing or duplicate dates and inconsistent issue/validity dates.
+
+Verified locally on November 4, 2026: 28 tests passed and 16/16 synthetic packages matched their labels using the offline RulePlanner. These results do not measure live-model extraction or production accuracy.
 
 ## Safety
 

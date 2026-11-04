@@ -1,10 +1,11 @@
-"""Generate 10 synthetic auto-refinance packages with known answers.
+"""Generate synthetic auto-refinance packages with known answers.
 
 All names, addresses and VINs are made up. Run from the repo root:
     python3 scripts/make_synthetic.py
 Writes data/synthetic/<package>/*.txt and data/synthetic/labels.json.
 """
 import json
+from datetime import date, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent / "data" / "synthetic"
@@ -23,9 +24,12 @@ def registration(name, vin, expires):
     return f"VEHICLE REGISTRATION\nName: {name}\nVIN: {vin}\nExpires: {expires}\n"
 
 
-def payoff(name, vin, issued, amount="14,320.55"):
+def payoff(name, vin, issued, amount="14,320.55", good_through=None):
+    # Fixture content only: a lender's real validity window is not assumed.
+    if good_through is None:
+        good_through = (date.fromisoformat(issued) + timedelta(days=10)).isoformat()
     return (f"PAYOFF LETTER\nName: {name}\nVIN: {vin}\nStatement date: {issued}\n"
-            f"Payoff amount: ${amount}\n")
+            f"Payoff amount: ${amount}\nGood through: {good_through}\n")
 
 
 def full(n, name, addr, vin):
@@ -86,9 +90,27 @@ def build():
         for fname, text in docs.items():
             (d / fname).write_text(text, encoding="utf-8")
         labels[pkg] = expected
+    # Fixed regression cases, independent of the checklist's result.
+    cases = {
+        "pkg11": ("2026-10-26", "2026-11-03", "stale"),
+        "pkg12": ("2026-11-01", "11/12/26", "unreadable"),
+        "pkg13": ("2026-11-01", "", "unreadable"),
+        "pkg14": ("2026-11-01", "2026-11-04", None),
+        "pkg15": ("2026-11-01", "2026-02-30", "unreadable"),
+        "pkg16": ("2026-10-01", "2026-11-15", None),
+    }
+    name, addr, vin = PEOPLE[0]
+    for pkg, (issued, good_through, status) in cases.items():
+        docs = full(1, name, addr, vin)
+        docs["payoff.txt"] = payoff(name, vin, issued, good_through=good_through)
+        d = ROOT / pkg
+        d.mkdir(parents=True, exist_ok=True)
+        for fname, text in docs.items():
+            (d / fname).write_text(text, encoding="utf-8")
+        labels[pkg] = {"payoff_letter": status} if status else {}
     (ROOT / "labels.json").write_text(json.dumps({"as_of": AS_OF, "expected_flags": labels}, indent=2))
 
 
 if __name__ == "__main__":
     build()
-    print(f"wrote {len(PEOPLE)} packages to {ROOT}")
+    print(f"wrote {len(json.loads((ROOT / 'labels.json').read_text())['expected_flags'])} packages to {ROOT}")
