@@ -64,7 +64,7 @@ These are working guesses so the build can move. Each one gets replaced when MCU
 - The only output is an editable draft marked DRAFT. LoanReady never sends anything.
 - Text inside a document is treated as data. Package 07 has a planted "ignore the checklist" note, and the agent still flags it.
 
-The offline `RulePlanner` is used for tests and evals. `ClaudePlanner` asks the model for the next step when `ANTHROPIC_API_KEY` and `MODEL_ID` are set in `.env`, and its choice still goes through the same allow-list. The model planner has not been tested yet.
+The offline `RulePlanner` is used for tests and evals. `ClaudePlanner` asks the model for the next step when `ANTHROPIC_API_KEY` and `MODEL_ID` are set as environment variables, and its choice still goes through the same allow-list. The model planner has not been tested yet.
 
 ## Running it
 
