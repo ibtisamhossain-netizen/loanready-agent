@@ -1,0 +1,30 @@
+{
+  "as_of": "2026-11-04",
+  "expected_flags": {
+    "pkg01": {},
+    "pkg02": {
+      "payoff_letter": "missing"
+    },
+    "pkg03": {
+      "pay_stub": "stale"
+    },
+    "pkg04": {
+      "photo_id": "expired"
+    },
+    "pkg05": {
+      "payoff_letter": "stale",
+      "vehicle_registration": "missing"
+    },
+    "pkg06": {
+      "pay_stub": "unreadable"
+    },
+    "pkg07": {
+      "payoff_letter": "stale"
+    },
+    "pkg08": {},
+    "pkg09": {
+      "vehicle_registration": "expired"
+    },
+    "pkg10": {}
+  }
+}

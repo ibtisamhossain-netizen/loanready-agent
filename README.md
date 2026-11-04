@@ -6,7 +6,7 @@ Pursuit L2 Cycle 4 build by Ibtisam Hossain (build) and Priscilla Batroni (resea
 
 ## Status
 
-Week 7: PRD done, user stories written, repo set up. First build underway.
+Week 7: PRD done, user stories written, repo set up. First build: the review agent for stories 1 and 2 runs end to end on synthetic data.
 
 ## User stories
 
@@ -34,11 +34,27 @@ Out of scope: loan decisions, credit underwriting or credit reports, real member
 
 ## How the agent works
 
-To be filled in as the build goes. See "Where the agent fits" in the user stories.
+`loanready/agent.py` runs one review as a loop: observe the package state, pick one next action, run it, check the result, repeat.
+
+- Actions are allow-listed: list documents, read a document, run the checklist, finish. Anything else is refused and the run stops.
+- Tools are read-only and can only open files inside `data/synthetic/` (`loanready/tools.py`).
+- Stop rules: done when every required document has a checklist result, a 12-pass limit, or the same action twice in a row.
+- Checklist decisions are plain code in `loanready/checklist.py`, never the model. That file is a placeholder until MCU confirms the real document list (`CONFIRMED = False`).
+- Every extracted field keeps the source line as evidence, so the rep can compare it to the original.
+- The only output is an editable draft marked DRAFT. LoanReady never sends anything.
+- Text inside a document is treated as data. Package 07 has a planted "ignore the checklist" note, and the agent still flags it.
+
+The offline `RulePlanner` is used for tests and evals. `ClaudePlanner` asks the model for the next step when `ANTHROPIC_API_KEY` and `MODEL_ID` are set in `.env`, and its choice still goes through the same allow-list. The model planner has not been tested yet.
 
 ## Running it
 
-To be added.
+```
+python3 scripts/make_synthetic.py   # build the 10 synthetic packages
+python3 scripts/eval.py             # end-to-end eval against the labels
+python3 -m pytest -q tests          # safety and loop tests
+```
+
+Current result: 10 of 10 synthetic packages flagged correctly, 7 of 7 tests passing. The rules and the labels were written by the same person, so this checks that the loop works, not real-world accuracy. Real accuracy needs MCU's checklist and documents labeled by someone else.
 
 ## Safety
 
