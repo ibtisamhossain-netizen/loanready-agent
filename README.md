@@ -32,6 +32,22 @@ In scope for the MVP: one loan type (auto refinance), synthetic documents only, 
 
 Out of scope: loan decisions, credit underwriting or credit reports, real member data, automated messaging, and MCU system integrations.
 
+## Build order
+
+Story 1 (catch missing, expired, or stale documents during the visit) is built first. It is the core of the PRD problem and the JD's "accurate first-time documentation" goal, and stories 3 and 4 both depend on its output: the open-file list needs each file's status, and the follow-up draft is built from the missing items. Story 2 (fields beside their source line) comes with it, because a flag the rep can't check against the original isn't useful.
+
+## Assumptions
+
+These are working guesses so the build can move. Each one gets replaced when MCU or Priscilla's research confirms the real answer.
+
+- The required documents for an auto refinance are photo ID, pay stub, vehicle registration, and a payoff letter from the current lender.
+- A pay stub counts as stale after 30 days and a payoff letter after 10 days, both counted from the issue date.
+- Photo ID and registration only need to be unexpired on the day of the check.
+- A document with no readable date is flagged "unreadable" for the rep to check, never passed.
+- The check runs against the date of the visit, so a file that passes today can go stale later.
+- Documents arrive as text files in one folder per application. Real uploads (PDFs, photos) are out of scope until the loop is proven.
+- These rules live in `loanready/checklist.py` with `CONFIRMED = False` until MCU operations signs off.
+
 ## How the agent works
 
 `loanready/agent.py` runs one review as a loop: observe the package state, pick one next action, run it, check the result, repeat.
