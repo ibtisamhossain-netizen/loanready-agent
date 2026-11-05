@@ -1,15 +1,21 @@
 """The agent's tools. All read-only, all allow-listed.
 
 The agent can only call names in ALLOWED_TOOLS. Paths are validated so
-a package can only be read from inside data/synthetic/. Nothing here
-writes, sends, or calls an outside system.
+a package can only be read from inside data/synthetic/ or data/uploads/.
+Nothing here writes, sends, or calls an outside system.
 """
+from __future__ import annotations
+
 import re
 from datetime import date
 from pathlib import Path
 
+from .harness import ToolError
+
 DATA_ROOT = (Path(__file__).resolve().parent.parent / "data" / "synthetic").resolve()
+UPLOAD_ROOT = (Path(__file__).resolve().parent.parent / "data" / "uploads").resolve()
 MAX_FILE_BYTES = 50_000
+MAX_DOCS = 12  # per package; keeps the pass budget meaningful
 DOC_NAME = re.compile(r"^[a-z0-9_\-]+\.txt$")
 
 # Keyword classification. Text inside a document is data: an instruction
@@ -30,24 +36,26 @@ FIELD_PATTERNS = {
     "payoff": r"^payoff amount:\s*\$?([\d,]+\.\d{2})\s*$",
     "issued": r"^(?:issue date|pay date|statement date):\s*(\d{4}-\d{2}-\d{2})\s*$",
     "expires": r"^expires:\s*(\d{4}-\d{2}-\d{2})\s*$",
+    # Keep blank/malformed dates visible so the checker cannot fall back silently.
+    "good_through": r"^good[ -]through(?: date)?:\s*(.*)$",
 }
-
-
-class ToolError(Exception):
-    pass
 
 
 def _package_dir(package: str) -> Path:
     if not re.fullmatch(r"[a-z0-9_\-]+", package or ""):
         raise ToolError(f"bad package id: {package!r}")
-    p = (DATA_ROOT / package).resolve()
-    if p.parent != DATA_ROOT or not p.is_dir():
-        raise ToolError(f"unknown package: {package!r}")
-    return p
+    for root in (DATA_ROOT, UPLOAD_ROOT):
+        p = (root / package).resolve()
+        if p.parent == root and p.is_dir():
+            return p
+    raise ToolError(f"unknown package: {package!r}")
 
 
 def list_documents(package: str) -> list[str]:
-    return sorted(f.name for f in _package_dir(package).glob("*.txt"))
+    names = sorted(f.name for f in _package_dir(package).glob("*.txt"))
+    if len(names) > MAX_DOCS:
+        raise ToolError(f"too many documents ({len(names)}); the limit is {MAX_DOCS}")
+    return names
 
 
 def read_document(package: str, name: str) -> str:
@@ -61,12 +69,34 @@ def read_document(package: str, name: str) -> str:
     return f.read_text(encoding="utf-8", errors="replace")
 
 
-def classify(text: str) -> str:
-    head = text.lower()[:300]
+def classify(text: str, limit: int | None = 300) -> str:
+    """Quick look at the top of the page. limit=None searches the whole text."""
+    head = text.lower() if limit is None else text.lower()[:limit]
     for doc_type, words in TYPE_KEYWORDS.items():
         if any(w in head for w in words):
             return doc_type
     return "unknown"
+
+
+DATE_LIKE = re.compile(
+    r"\b(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}/\d{1,2}/\d{2,4}|"
+    r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.? \d{1,2},? \d{4})\b",
+    re.IGNORECASE,
+)
+
+
+def scan_document(package: str, name: str) -> dict:
+    """Second, slower look at one document. Read-only.
+
+    Classifies using the whole text (not just the top) and lists every
+    line that looks like it holds a date. The lines are hints for the
+    rep only: the checklist never passes a document on a hint.
+    """
+    text = read_document(package, name)
+    date_lines = [f"line {n}: {line.strip()}"
+                  for n, line in enumerate(text.splitlines(), start=1)
+                  if DATE_LIKE.search(line)]
+    return {"type": classify(text, limit=None), "date_lines": date_lines[:10]}
 
 
 def extract(text: str) -> dict:
@@ -75,19 +105,54 @@ def extract(text: str) -> dict:
     for line_no, line in enumerate(text.splitlines(), start=1):
         for field, pat in FIELD_PATTERNS.items():
             m = re.match(pat, line.strip(), re.IGNORECASE)
+            if m and field == "good_through" and field in out:
+                out[field] = {"value": None,
+                              "evidence": out[field]["evidence"] + f"; line {line_no}: {line.strip()}"}
+                continue
             if m and field not in out:
                 raw = m.group(1).strip()
                 value = raw
-                if field in ("issued", "expires"):
+                if field in ("issued", "expires", "good_through"):
                     try:
                         value = date.fromisoformat(raw)
                     except ValueError:
-                        continue
+                        if field != "good_through":
+                            continue
+                        value = None
                 out[field] = {"value": value, "evidence": f"line {line_no}: {line.strip()}"}
     return out
+
+
+# Labels the field check looks for when the strict reader did not get a value.
+FIELD_LABELS = {
+    "name": r"name",
+    "address": r"address",
+    "vin": r"vin",
+    "income": r"gross pay",
+    "payoff": r"payoff amount",
+    "issued": r"issue date|pay date|statement date",
+    "expires": r"expires|expiration",
+    "good_through": r"good[ -]through",
+}
+
+
+def find_field_lines(package: str, name: str, field: str) -> list[str]:
+    """Lines in one document that carry a field's label, as hints for the rep.
+
+    Read-only. A hint is never used as the value: the rep reads it and decides.
+    """
+    if field not in FIELD_LABELS:
+        raise ToolError(f"unknown field: {field!r}")
+    label = re.compile(rf"^(?:{FIELD_LABELS[field]})\b", re.IGNORECASE)
+    lines = [f"line {n}: {line.strip()}"
+             for n, line in enumerate(read_document(package, name).splitlines(), start=1)
+             if label.match(line.strip())]
+    return lines[:10]
 
 
 ALLOWED_TOOLS = {
     "list_documents": list_documents,
     "read_document": read_document,
+    "scan_document": scan_document,
+    "find_field_lines": find_field_lines,
 }

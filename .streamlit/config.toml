@@ -1,0 +1,13 @@
+[client]
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false
+
+# Tokens match docs/ui-handoff.md
+[theme]
+base = "light"
+primaryColor = "#2747A0"
+backgroundColor = "#F6F7F5"
+secondaryBackgroundColor = "#ECEFEC"
+textColor = "#1E2A32"

@@ -2,7 +2,7 @@ from datetime import date
 
 import pytest
 
-from loanready import agent, checklist, tools
+from loanready import agent, checklist, followup, tools
 
 AS_OF = date(2026, 11, 4)
 
@@ -46,7 +46,7 @@ def test_extraction_keeps_source_evidence():
 
 def test_draft_only_lists_selected_items_and_is_marked_draft():
     state = agent.review("pkg05", AS_OF)
-    draft = agent.draft_request(state, ["payoff_letter"])
+    draft = followup.draft_followup(state, ["payoff_letter"])["draft"]
     assert draft.startswith("DRAFT")
     assert "payoff letter" in draft and "registration" not in draft
 

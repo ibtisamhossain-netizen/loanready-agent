@@ -3,3 +3,4 @@ Name: Tom Brady-Ortiz
 VIN: 5YJSA1E26HF000001
 Statement date: 2026-11-01
 Payoff amount: $14,320.55
+Good through: 2026-11-11

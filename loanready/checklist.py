@@ -6,7 +6,9 @@ confirmed before launch. Every rule lives here, in plain code, so the
 model never decides what counts as missing or stale and the whole
 file is cheap to replace once MCU confirms the real list.
 """
-from datetime import date
+from __future__ import annotations
+
+from datetime import date, timedelta
 
 CONFIRMED = False  # flip only after MCU operations signs off
 
@@ -15,24 +17,67 @@ REQUIRED_DOCS = ["photo_id", "pay_stub", "vehicle_registration", "payoff_letter"
 # Max age in days, counted from the document's issue date (assumption)
 MAX_AGE_DAYS = {
     "pay_stub": 30,
-    "payoff_letter": 10,
 }
 
 # Documents with an expiry date that must still be valid (assumption)
 EXPIRES = {"photo_id", "vehicle_registration"}
 
+# Statuses the rep asks the member to fix. Anything else the rep reads first.
+ASK_STATUSES = {"missing", "expired", "stale"}
 
-def check(results: dict, as_of: date) -> list[dict]:
+# Values the field check expects on each document type (assumption)
+REQUIRED_FIELDS = {
+    "photo_id": ["name", "address", "expires"],
+    "pay_stub": ["name", "issued", "income"],
+    "vehicle_registration": ["name", "vin", "expires"],
+    "payoff_letter": ["name", "vin", "issued", "payoff", "good_through"],
+}
+
+# Values that must agree wherever they appear (assumption)
+COMPARED_FIELDS = {
+    "name": set(REQUIRED_DOCS),
+    "vin": {"vehicle_registration", "payoff_letter"},
+}
+
+# Days after the last activity to look at an open file again (assumption). This
+# is a staff reminder only, not a legal deadline: MCU compliance has not approved
+# any timing for incomplete files.
+FOLLOW_UP_DAYS = 3
+
+
+def check(results: dict, as_of: date, conflicts: dict | None = None) -> list[dict]:
     """results maps doc_type -> extracted fields (dates as date objects).
+
+    conflicts maps doc_type -> file names when more than one file has that
+    type. The checklist never picks one: the rep decides (assumption).
 
     Returns one row per required document with status:
     ok, missing, expired, stale, or unreadable.
     """
+    conflicts = conflicts or {}
     rows = []
     for doc in REQUIRED_DOCS:
+        if doc in conflicts:
+            rows.append({"doc": doc, "status": "unreadable",
+                         "rule": f"{len(conflicts[doc])} documents of this type "
+                                 f"({', '.join(conflicts[doc])}); rep picks one"})
+            continue
         fields = results.get(doc)
         if fields is None:
             rows.append({"doc": doc, "status": "missing", "rule": "required document"})
+            continue
+        if doc == "payoff_letter":
+            good_through = fields.get("good_through")
+            issued = fields.get("issued")
+            if not isinstance(good_through, date):
+                status, rule = "unreadable", "needs one unambiguous good-through date; rep review required"
+            elif issued is not None and (issued > as_of or good_through < issued):
+                status, rule = "unreadable", "inconsistent payoff dates; rep review required"
+            elif good_through < as_of:
+                status, rule = "stale", f"good-through date passed ({good_through.isoformat()})"
+            else:
+                status, rule = "ok", f"valid through {good_through.isoformat()} (inclusive; demo assumption)"
+            rows.append({"doc": doc, "status": status, "rule": rule})
             continue
         if doc in EXPIRES:
             exp = fields.get("expires")
@@ -56,3 +101,21 @@ def check(results: dict, as_of: date) -> list[dict]:
             continue
         rows.append({"doc": doc, "status": "ok", "rule": "present"})
     return rows
+
+
+def next_lapse(results: dict, as_of: date) -> date | None:
+    """The soonest day on or after as_of that a document stops counting."""
+    dates = [results.get(doc, {}).get("expires") for doc in EXPIRES]
+    dates.append(results.get("payoff_letter", {}).get("good_through"))
+    for doc, limit in MAX_AGE_DAYS.items():
+        issued = results.get(doc, {}).get("issued")
+        if isinstance(issued, date):
+            dates.append(issued + timedelta(days=limit))
+    upcoming = [d for d in dates if isinstance(d, date) and d >= as_of]
+    return min(upcoming) if upcoming else None
+
+
+def follow_up_date(last_activity: date, lapse: date | None) -> date:
+    """Suggested staff reminder: a few days out, sooner if a document will lapse."""
+    follow_up = last_activity + timedelta(days=FOLLOW_UP_DAYS)
+    return min(follow_up, lapse) if lapse else follow_up

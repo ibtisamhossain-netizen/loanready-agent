@@ -1,10 +1,11 @@
-"""Generate 10 synthetic auto-refinance packages with known answers.
+"""Generate synthetic auto-refinance packages with known answers.
 
 All names, addresses and VINs are made up. Run from the repo root:
     python3 scripts/make_synthetic.py
 Writes data/synthetic/<package>/*.txt and data/synthetic/labels.json.
 """
 import json
+from datetime import date, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent / "data" / "synthetic"
@@ -23,9 +24,12 @@ def registration(name, vin, expires):
     return f"VEHICLE REGISTRATION\nName: {name}\nVIN: {vin}\nExpires: {expires}\n"
 
 
-def payoff(name, vin, issued, amount="14,320.55"):
+def payoff(name, vin, issued, amount="14,320.55", good_through=None):
+    # Fixture content only: a lender's real validity window is not assumed.
+    if good_through is None:
+        good_through = (date.fromisoformat(issued) + timedelta(days=10)).isoformat()
     return (f"PAYOFF LETTER\nName: {name}\nVIN: {vin}\nStatement date: {issued}\n"
-            f"Payoff amount: ${amount}\n")
+            f"Payoff amount: ${amount}\nGood through: {good_through}\n")
 
 
 def full(n, name, addr, vin):
@@ -86,9 +90,86 @@ def build():
         for fname, text in docs.items():
             (d / fname).write_text(text, encoding="utf-8")
         labels[pkg] = expected
-    (ROOT / "labels.json").write_text(json.dumps({"as_of": AS_OF, "expected_flags": labels}, indent=2))
+    # Fixed regression cases, independent of the checklist's result.
+    cases = {
+        "pkg11": ("2026-10-26", "2026-11-03", "stale"),
+        "pkg12": ("2026-11-01", "11/12/26", "unreadable"),
+        "pkg13": ("2026-11-01", "", "unreadable"),
+        "pkg14": ("2026-11-01", "2026-11-04", None),
+        "pkg15": ("2026-11-01", "2026-02-30", "unreadable"),
+        "pkg16": ("2026-10-01", "2026-11-15", None),
+    }
+    name, addr, vin = PEOPLE[0]
+    for pkg, (issued, good_through, status) in cases.items():
+        docs = full(1, name, addr, vin)
+        docs["payoff.txt"] = payoff(name, vin, issued, good_through=good_through)
+        d = ROOT / pkg
+        d.mkdir(parents=True, exist_ok=True)
+        for fname, text in docs.items():
+            (d / fname).write_text(text, encoding="utf-8")
+        labels[pkg] = {"payoff_letter": status} if status else {}
+    # Branching cases: each one makes the agent take a different path
+    # after the first checklist run.
+    name, addr, vin = PEOPLE[1]
+    letterhead = ("Brightline Logistics LLC\n200 Harbor Blvd, Suite 400, Long Island City NY 11101\n"
+                  "Payroll Department | Phone 718-555-0142 | Fax 718-555-0143\n"
+                  "This statement is provided for your records. Questions about deductions, "
+                  "direct deposit, or tax withholding should go to the payroll department "
+                  "during business hours, Monday to Friday.\n")
+    branch_cases = {
+        # pay stub buried under a long letterhead: first look misses it,
+        # the full scan finds it, the checklist runs again and passes
+        "pkg17": ({"paystub.txt": letterhead + pay_stub(name, "2026-10-24")}, {}),
+        # pay stub date in a format the strict reader skips: stays
+        # unreadable, the scan gives the rep the line to check
+        "pkg18": ({"paystub.txt": "EARNINGS STATEMENT (PAY STUB)\nName: Marcus Lee\n"
+                                  "Pay date: Oct 24, 2026\nGross pay: $2,450.00\n"},
+                  {"pay_stub": "unreadable"}),
+        # two pay stubs: the checklist does not pick one, the rep does
+        "pkg19": ({"paystub_oct.txt": pay_stub(name, "2026-10-24"),
+                   "paystub_aug.txt": pay_stub(name, "2026-08-15")},
+                  {"pay_stub": "unreadable"}),
+    }
+    for pkg, (changes, expected) in branch_cases.items():
+        docs = full(2, name, addr, vin)
+        if "paystub.txt" not in changes:
+            del docs["paystub.txt"]
+        docs.update(changes)
+        d = ROOT / pkg
+        d.mkdir(parents=True, exist_ok=True)
+        for f in d.glob("*.txt"):
+            f.unlink()
+        for fname, text in docs.items():
+            (d / fname).write_text(text, encoding="utf-8")
+        labels[pkg] = expected
+    # Field check cases: every checklist row passes, but a value does not hold up.
+    name, addr, vin = PEOPLE[2]
+    other_vin = PEOPLE[3][2]
+    field_cases = {
+        # the payoff letter is for a different vehicle
+        "pkg20": ({"payoff.txt": payoff(name, other_vin, "2026-11-01")}, ["mismatch:vin"]),
+        # the pay stub is in someone else's name
+        "pkg21": ({"paystub.txt": pay_stub("Aisha Karim", "2026-10-24")}, ["mismatch:name"]),
+        # a VIN one character short: the reader skips it, the scan finds the line
+        "pkg22": ({"registration.txt": registration(name, vin[:-1], "2027-08-31")},
+                  ["missing_field:vin"]),
+    }
+    findings = {}
+    for pkg, (changes, expected) in field_cases.items():
+        docs = full(3, name, addr, vin)
+        docs.update(changes)
+        d = ROOT / pkg
+        d.mkdir(parents=True, exist_ok=True)
+        for f in d.glob("*.txt"):
+            f.unlink()
+        for fname, text in docs.items():
+            (d / fname).write_text(text, encoding="utf-8")
+        labels[pkg] = {}
+        findings[pkg] = expected
+    (ROOT / "labels.json").write_text(json.dumps(
+        {"as_of": AS_OF, "expected_flags": labels, "expected_field_findings": findings}, indent=2))
 
 
 if __name__ == "__main__":
     build()
-    print(f"wrote {len(PEOPLE)} packages to {ROOT}")
+    print(f"wrote {len(json.loads((ROOT / 'labels.json').read_text())['expected_flags'])} packages to {ROOT}")

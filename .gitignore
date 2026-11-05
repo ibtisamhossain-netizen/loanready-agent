@@ -8,6 +8,10 @@ secrets/
 # Real member data never goes in this repo; use synthetic files only
 data/real/
 
+# Local demo uploads and results
+data/uploads/
+data/*.db
+
 # Python
 __pycache__/
 *.pyc
