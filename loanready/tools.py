@@ -1,14 +1,15 @@
 """The agent's tools. All read-only, all allow-listed.
 
 The agent can only call names in ALLOWED_TOOLS. Paths are validated so
-a package can only be read from inside data/synthetic/. Nothing here
-writes, sends, or calls an outside system.
+a package can only be read from inside data/synthetic/ or data/uploads/.
+Nothing here writes, sends, or calls an outside system.
 """
 import re
 from datetime import date
 from pathlib import Path
 
 DATA_ROOT = (Path(__file__).resolve().parent.parent / "data" / "synthetic").resolve()
+UPLOAD_ROOT = (Path(__file__).resolve().parent.parent / "data" / "uploads").resolve()
 MAX_FILE_BYTES = 50_000
 DOC_NAME = re.compile(r"^[a-z0-9_\-]+\.txt$")
 
@@ -42,10 +43,11 @@ class ToolError(Exception):
 def _package_dir(package: str) -> Path:
     if not re.fullmatch(r"[a-z0-9_\-]+", package or ""):
         raise ToolError(f"bad package id: {package!r}")
-    p = (DATA_ROOT / package).resolve()
-    if p.parent != DATA_ROOT or not p.is_dir():
-        raise ToolError(f"unknown package: {package!r}")
-    return p
+    for root in (DATA_ROOT, UPLOAD_ROOT):
+        p = (root / package).resolve()
+        if p.parent == root and p.is_dir():
+            return p
+    raise ToolError(f"unknown package: {package!r}")
 
 
 def list_documents(package: str) -> list[str]:

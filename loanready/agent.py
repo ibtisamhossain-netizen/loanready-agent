@@ -11,6 +11,7 @@ never by the model, and the agent only produces a draft for the rep.
 import json
 import os
 from datetime import date
+from pathlib import Path
 
 from . import checklist, tools
 
@@ -31,7 +32,7 @@ class RulePlanner:
 
 
 class ClaudePlanner:
-    """Untested in CI: needs ANTHROPIC_API_KEY and MODEL_ID in .env."""
+    """Untested in CI: needs ANTHROPIC_API_KEY and MODEL_ID in the environment."""
 
     def __init__(self):
         import anthropic  # optional dependency
@@ -138,6 +139,12 @@ def draft_request(state: dict, selected_docs: list[str]) -> str:
 
 
 def make_planner():
+    """Use Claude when the repo's .env (or the environment) has a key and model."""
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+    except ImportError:  # offline setups don't need python-dotenv
+        pass
     if os.environ.get("ANTHROPIC_API_KEY") and os.environ.get("MODEL_ID"):
         return ClaudePlanner()
     return RulePlanner()

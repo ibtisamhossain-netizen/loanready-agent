@@ -6,7 +6,7 @@ Pursuit L2 Cycle 4 build by Ibtisam Hossain (build) and Priscilla Batroni (resea
 
 ## Status
 
-Week 7: PRD done, user stories written, repo set up. First build: the review agent for stories 1 and 2 runs end to end on synthetic data.
+Week 7: PRD revised and resubmitted, user stories written, repo set up. The review agent for stories 1 and 2 runs end to end on synthetic data, and a local demo screen shows upload through flags beside the source. Correcting or rejecting a field, the open-file list, and follow-up drafts on screen are not built yet.
 
 ## User stories
 
@@ -22,7 +22,7 @@ Sources and demo tests for each story are in [docs/user-stories.md](docs/user-st
 
 For offline tests, create a virtual environment with `python3 -m venv .venv`, then install pytest with `.venv/bin/python -m pip install -r requirements-dev.txt`. Use `.venv/bin/python` for the commands below.
 
-Copy `.env.example` to `.env` locally if needed. `.env` is in `.gitignore` and must never be committed. Offline mode needs no key. The optional live planner reads environment variables; it does not load `.env` automatically.
+Offline mode needs no key. For the optional live planner, install `requirements.txt` and put `ANTHROPIC_API_KEY` and `MODEL_ID=claude-sonnet-5-5` in a local `.env` (see `.env.example`). `.env` is in `.gitignore` and must never be committed. Run `.venv/bin/python test_model.py` to check the key and model; it makes one small API call. `make_planner()` loads `.env`.
 
 ## Docs
 
@@ -64,9 +64,11 @@ These are working guesses so the build can move. Each one gets replaced when MCU
 - The only output is an editable draft marked DRAFT. LoanReady never sends anything.
 - Text inside a document is treated as data. Package 07 has a planted "ignore the checklist" note, and the agent still flags it.
 
-The offline `RulePlanner` is used for tests and evals. `ClaudePlanner` asks the model for the next step when `ANTHROPIC_API_KEY` and `MODEL_ID` are set as environment variables, and its choice still goes through the same allow-list. The model planner has not been tested yet.
+The offline `RulePlanner` is used for tests and evals. `ClaudePlanner` asks the model for the next step when `ANTHROPIC_API_KEY` and `MODEL_ID` are set in `.env` or the environment, and its choice still goes through the same allow-list. The model planner has not been tested yet.
 
 ## Running it
+
+To see the demo screen, install `requirements.txt` and run `.venv/bin/python -m streamlit run app.py`. Pick a sample package or upload `.txt` files, and the screen shows each flag beside its source line. Uploads go to `data/uploads/` and results to `data/loanready.db`, both ignored by git. The screen uses the offline `RulePlanner`. Use synthetic documents only.
 
 ```
 python3 scripts/make_synthetic.py   # build the 16 synthetic packages
