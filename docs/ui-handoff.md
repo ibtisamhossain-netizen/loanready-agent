@@ -2,7 +2,7 @@
 
 ## Overview
 
-One screen for an MCU Member Service Representative with the member sitting at the desk. The rep picks a package (sample or uploaded `.txt` files), runs the check, and needs one answer fast: what to ask the member for before they leave. Everything below the answer is there so the rep can see why, and compare each value with the original.
+Two tabs, At the desk and Open files. This spec covers At the desk: one screen for an MCU Member Service Representative with the member sitting at the desk. The rep picks a package (sample or uploaded `.txt` files), runs the check, and needs one answer fast: what to ask the member for before they leave. Everything below the answer is there so the rep can see why, and compare each value with the original.
 
 The screen is built in Streamlit (`app.py`). Custom parts are HTML strings rendered with `st.markdown(..., unsafe_allow_html=True)`; Streamlit widgets handle input. Theme values are in `.streamlit/config.toml` and the CSS tokens at the top of `app.py`.
 
@@ -123,4 +123,4 @@ None beyond Streamlit's expander default. Reduced-motion turns off all transitio
 
 ## Not covered
 
-Correcting or rejecting a field (story 2), the open-file list (story 3) and the follow-up draft (story 4) have no screen yet.
+The field check findings, follow-up draft, correction form and Open files tab are built with the same tokens but have no full spec here yet. Marking a requested document as received has no screen.

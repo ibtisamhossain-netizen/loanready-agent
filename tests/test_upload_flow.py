@@ -93,3 +93,48 @@ def test_screen_escapes_document_text(uploads, tmp_path, monkeypatch):
     spec.loader.exec_module(module)
     html = module.fields_html(state, "note.txt", state["read"]["note.txt"])
     assert "<script>" not in html and "&lt;script&gt;" in html
+
+
+def test_screen_shows_field_mismatch_draft_and_open_files(tmp_path, monkeypatch):
+    streamlit_testing = pytest.importorskip("streamlit.testing.v1")
+    monkeypatch.setattr(store, "DB_PATH", tmp_path / "screen.db")
+    root = PKG11.parent.parent.parent
+    app = streamlit_testing.AppTest.from_file(str(root / "app.py"), default_timeout=30)
+    app.run()
+    assert not app.exception
+    app.date_input[0].set_value(AS_OF)
+    next(s for s in app.selectbox if s.label == "Sample package").set_value("pkg05")
+    next(b for b in app.button if b.label == "Check package").click()
+    app.run()
+    assert not app.exception
+    draft = next(t for t in app.text_area if t.label == "Draft").value
+    assert draft.startswith("DRAFT") and "payoff letter" in draft and "vehicle registration" in draft.lower()
+    page = " ".join(m.value for m in app.markdown)
+    assert "pkg05" in page and "waiting on member" in page
+
+    next(s for s in app.selectbox if s.label == "Sample package").set_value("pkg20")
+    next(b for b in app.button if b.label == "Check package").click()
+    app.run()
+    assert not app.exception
+    page = " ".join(m.value for m in app.markdown)
+    assert "Compare the VIN across documents." in page
+
+
+def test_screen_correction_reruns_the_check(tmp_path, monkeypatch):
+    streamlit_testing = pytest.importorskip("streamlit.testing.v1")
+    monkeypatch.setattr(store, "DB_PATH", tmp_path / "screen.db")
+    root = PKG11.parent.parent.parent
+    app = streamlit_testing.AppTest.from_file(str(root / "app.py"), default_timeout=30)
+    app.run()
+    app.date_input[0].set_value(AS_OF)
+    next(b for b in app.button if b.label == "Check package").click()
+    app.run()
+    next(s for s in app.selectbox if s.label == "Document").set_value("payoff.txt")
+    next(s for s in app.selectbox if s.label == "Value").set_value("good_through")
+    next(t for t in app.text_input if t.label.startswith("Corrected value")).set_value("2026-11-20")
+    next(b for b in app.button if b.label == "Save and recheck").click()
+    app.run()
+    assert not app.exception
+    page = " ".join(m.value for m in app.markdown)
+    assert "Nothing to ask for." in page and "corrected by you" in page
+    assert "Good through: 2026-11-03" in tools.read_document("pkg11", "payoff.txt")

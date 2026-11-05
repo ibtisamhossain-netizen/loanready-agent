@@ -46,6 +46,20 @@
     },
     "pkg19": {
       "pay_stub": "unreadable"
-    }
+    },
+    "pkg20": {},
+    "pkg21": {},
+    "pkg22": {}
+  },
+  "expected_field_findings": {
+    "pkg20": [
+      "mismatch:vin"
+    ],
+    "pkg21": [
+      "mismatch:name"
+    ],
+    "pkg22": [
+      "missing_field:vin"
+    ]
   }
 }

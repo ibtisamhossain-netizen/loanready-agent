@@ -41,9 +41,9 @@ As an MCU QA reviewer, I need to maintain the checklist and freshness rules, so 
 - Status: assumption. Not in the first build. Stories 1 and 2 depend on it, so the first build uses a placeholder checklist file that is clearly marked as unconfirmed.
 - What would confirm it: MCU operations shares the auto-refinance document list and how old a pay stub or payoff letter can be.
 
-## Where the agent fits
+## Where the agents fit
 
-Stories 1 and 2 run as an agent loop over one uploaded package.
+Stories 1 and 2 run as agent loops over one uploaded package (review, then field check). Story 3 runs as a loop over the open files, and story 4 as a write, check and revise loop over the rep's selected items. The README has the table. The steps below describe the review agent; the others share its guards.
 
 - Observe: the package, the checklist, and the last tool result.
 - Think and act: pick one next step (classify a document, extract fields, run the checklist).

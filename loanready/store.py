@@ -30,6 +30,14 @@ CREATE TABLE IF NOT EXISTS checklist_result (
     required_document TEXT NOT NULL, status TEXT NOT NULL, rule_applied TEXT NOT NULL,
     checked_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS open_file (
+    package TEXT PRIMARY KEY, application_id TEXT NOT NULL REFERENCES application(id),
+    last_activity TEXT NOT NULL, next_follow_up TEXT, notes TEXT NOT NULL DEFAULT '', closed_on TEXT
+);
+CREATE TABLE IF NOT EXISTS field_review (
+    id INTEGER PRIMARY KEY, package TEXT NOT NULL, file_name TEXT NOT NULL, field_name TEXT NOT NULL,
+    action TEXT NOT NULL, original_value TEXT, new_value TEXT, reviewed_on TEXT NOT NULL
+);
 """
 
 
@@ -92,6 +100,83 @@ def save_review(state: dict, visit_date: date, db_path=None) -> str:
                 "INSERT INTO checklist_result (application_id, required_document, status, rule_applied, checked_at) "
                 "VALUES (?, ?, ?, ?, ?)",
                 [(record_id, r["doc"], r["status"], r["rule"], checked_at) for r in results])
+            # One open file per package: a new check reopens it and keeps the rep's date and notes.
+            conn.execute(
+                "INSERT INTO open_file (package, application_id, last_activity) VALUES (?, ?, ?) "
+                "ON CONFLICT(package) DO UPDATE SET application_id = excluded.application_id, "
+                "last_activity = max(last_activity, excluded.last_activity), closed_on = NULL",
+                (state["package"], record_id, visit_date.isoformat()))
     finally:
         conn.close()
     return record_id
+
+
+def _read(db_path, query: str, args: tuple = ()) -> list:
+    """Rows from the local database, or none if nothing has been saved yet."""
+    db_path = Path(db_path or DB_PATH)
+    if not db_path.exists():
+        return []
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.executescript(SCHEMA)
+        return conn.execute(query, args).fetchall()
+    finally:
+        conn.close()
+
+
+def open_files(db_path=None) -> list[dict]:
+    """Every file not closed yet, with the statuses from its last saved check."""
+    rows = _read(db_path, "SELECT package, application_id, last_activity, next_follow_up, notes "
+                          "FROM open_file WHERE closed_on IS NULL ORDER BY package")
+    files = []
+    for package, application_id, last_activity, next_follow_up, notes in rows:
+        statuses = _read(db_path, "SELECT required_document, status FROM checklist_result "
+                                  "WHERE application_id = ?", (application_id,))
+        files.append({"package": package, "application_id": application_id,
+                      "last_activity": last_activity, "next_follow_up": next_follow_up,
+                      "notes": notes, "last_statuses": dict(statuses)})
+    return files
+
+
+def update_file(package: str, today: date, next_follow_up: date = None, notes: str = None,
+                close: bool = False, db_path=None) -> None:
+    """The rep's changes to an open file. Only the rep's actions call this."""
+    db_path = Path(db_path or DB_PATH)
+    conn = sqlite3.connect(db_path)
+    try:
+        with conn:
+            conn.executescript(SCHEMA)
+            found = conn.execute(
+                "UPDATE open_file SET last_activity = ?, "
+                "next_follow_up = coalesce(?, next_follow_up), notes = coalesce(?, notes), "
+                "closed_on = ? WHERE package = ?",
+                (today.isoformat(), next_follow_up.isoformat() if next_follow_up else None, notes,
+                 today.isoformat() if close else None, package)).rowcount
+    finally:
+        conn.close()
+    if not found:
+        raise tools.ToolError(f"not an open file: {package!r}")
+
+
+def save_field_review(package: str, review: dict, today: date, db_path=None) -> None:
+    """Record a rep's correction or rejection. The source document is not changed."""
+    db_path = Path(db_path or DB_PATH)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(db_path)
+    try:
+        with conn:
+            conn.executescript(SCHEMA)
+            conn.execute(
+                "INSERT INTO field_review (package, file_name, field_name, action, original_value, "
+                "new_value, reviewed_on) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (package, review["file"], review["field"], review["action"],
+                 _text(review.get("original")), _text(review.get("value")), today.isoformat()))
+    finally:
+        conn.close()
+
+
+def field_reviews(package: str, db_path=None) -> list[dict]:
+    """A package's saved reviews, oldest first, so the newest one wins."""
+    rows = _read(db_path, "SELECT file_name, field_name, action, new_value FROM field_review "
+                          "WHERE package = ? ORDER BY id", (package,))
+    return [{"file": f, "field": k, "action": a, "value": v} for f, k, a, v in rows]

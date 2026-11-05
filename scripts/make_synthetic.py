@@ -142,7 +142,32 @@ def build():
         for fname, text in docs.items():
             (d / fname).write_text(text, encoding="utf-8")
         labels[pkg] = expected
-    (ROOT / "labels.json").write_text(json.dumps({"as_of": AS_OF, "expected_flags": labels}, indent=2))
+    # Field check cases: every checklist row passes, but a value does not hold up.
+    name, addr, vin = PEOPLE[2]
+    other_vin = PEOPLE[3][2]
+    field_cases = {
+        # the payoff letter is for a different vehicle
+        "pkg20": ({"payoff.txt": payoff(name, other_vin, "2026-11-01")}, ["mismatch:vin"]),
+        # the pay stub is in someone else's name
+        "pkg21": ({"paystub.txt": pay_stub("Aisha Karim", "2026-10-24")}, ["mismatch:name"]),
+        # a VIN one character short: the reader skips it, the scan finds the line
+        "pkg22": ({"registration.txt": registration(name, vin[:-1], "2027-08-31")},
+                  ["missing_field:vin"]),
+    }
+    findings = {}
+    for pkg, (changes, expected) in field_cases.items():
+        docs = full(3, name, addr, vin)
+        docs.update(changes)
+        d = ROOT / pkg
+        d.mkdir(parents=True, exist_ok=True)
+        for f in d.glob("*.txt"):
+            f.unlink()
+        for fname, text in docs.items():
+            (d / fname).write_text(text, encoding="utf-8")
+        labels[pkg] = {}
+        findings[pkg] = expected
+    (ROOT / "labels.json").write_text(json.dumps(
+        {"as_of": AS_OF, "expected_flags": labels, "expected_field_findings": findings}, indent=2))
 
 
 if __name__ == "__main__":

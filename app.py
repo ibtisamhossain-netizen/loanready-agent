@@ -9,6 +9,8 @@ described in docs/ui-handoff.md.
 Every piece of document-derived text (file names, source lines, hints) is
 escaped before it goes into HTML, so an uploaded file cannot inject markup.
 """
+from __future__ import annotations
+
 import json
 from datetime import date, timedelta
 from html import escape
@@ -16,7 +18,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from loanready import agent, checklist, store, tools
+from loanready import agent, checklist, fieldcheck, followup, harness, pipeline, store, tools
 
 ROOT = Path(__file__).resolve().parent
 LABELS = ROOT / "data" / "synthetic" / "labels.json"
@@ -31,7 +33,10 @@ RULE_FIELD = {"photo_id": "expires", "vehicle_registration": "expires",
               "pay_stub": "issued", "payoff_letter": "good_through"}
 STEP_NAMES = {"list_documents": "Listed the documents", "read_document": "Read",
               "scan_document": "Took a second look at", "run_checklist": "Ran the checklist",
-              "finish": "Finished"}
+              "compare_field": "Compared the", "find_gaps": "Looked for values it could not read",
+              "scan_for_field": "Looked for the line for", "list_open_files": "Listed the open files",
+              "recheck_file": "Rechecked", "propose_next_step": "Worked out the next step for",
+              "apply_rep_reviews": "Applied your changes", "finish": "Finished"}
 RULER_BEFORE, RULER_AFTER = 90, 60  # days shown either side of the visit
 
 CSS = """
@@ -124,9 +129,20 @@ div[data-testid="stExpander"] summary { padding-left: 0; font-weight: 600; }
   .lr-tick span { display: none; }
   .lr-visit span { left: auto; right: 6px; }
 }
+.lr-table-wrap { overflow-x: auto; }
+.lr-files { width: 100%; border-collapse: collapse; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.lr-files th { text-align: left; font-weight: 600; padding: 6px var(--space-sm) 6px 0; border-bottom: 2px solid var(--ink); }
+.lr-files td { padding: 8px var(--space-sm) 8px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+.lr-files td:last-child { min-width: 240px; }
+.lr-files small, .lr-fields small { color: var(--ink-soft); }
+.lr-files .flag { color: var(--flag); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 """
+
+
+FIELD_NAMES = {"issued": "Issue date", "expires": "Expires", "good_through": "Good through", "vin": "VIN",
+               "income": "Gross pay", "payoff": "Payoff amount", "name": "Name", "address": "Address"}
 
 
 def nice(d: date) -> str:
@@ -186,17 +202,29 @@ def ask_sentence(state: dict, row: dict) -> tuple[str, str]:
     return f"Read the {name} date yourself.", why
 
 
-def verdict_html(state: dict) -> str:
+def finding_sentence(finding: dict) -> tuple[str, str]:
+    """(what to do, why) for one field check finding. Returns HTML."""
+    label = FIELD_NAMES[finding["field"]]
+    if finding["kind"] == "mismatch":
+        where = "; ".join(f'{escape(d["file"])}, {quote(d["evidence"])}' for d in finding["docs"])
+        return f"Compare the {label if label == 'VIN' else label.lower()} across documents.", f"They differ: {where}."
+    hints = "; ".join(quote(h) for h in finding["hints"])
+    why = (f"LoanReady could not use this line: {hints}." if hints
+           else "LoanReady found no line for it.")
+    return f"Find the {label if label == 'VIN' else label.lower()} on {escape(finding['file'])} yourself.", why
+
+
+def verdict_html(state: dict, findings: list | None = None) -> str:
     flagged = agent.flags(state)
-    ask = [r for r in flagged if TONE[r["status"]] == "flag"]
-    check = [r for r in flagged if TONE[r["status"]] == "review"]
+    ask = [ask_sentence(state, r) for r in flagged if TONE[r["status"]] == "flag"]
+    check = [ask_sentence(state, r) for r in flagged if TONE[r["status"]] == "review"]
+    check += [finding_sentence(f) for f in findings or []]
 
     def items(rows, tone):
-        lis = "".join(f'<li>{say}<span class="why">{why}</span></li>'
-                      for say, why in (ask_sentence(state, r) for r in rows))
+        lis = "".join(f'<li>{say}<span class="why">{why}</span></li>' for say, why in rows)
         return f'<ul class="lr-ask {tone}">{lis}</ul>'
 
-    if not flagged:
+    if not ask and not check:
         return ('<div class="lr-verdict"><h2>Nothing to ask for.</h2>'
                 '<p class="lr-clear">All four documents pass the demo checklist. '
                 'Compare them with the originals before the member leaves.</p></div>')
@@ -281,12 +309,19 @@ def bar(a: date, b: date, pct, tone: str, label: str, end: date) -> str:
             f'<span {place}>{label}</span>')
 
 
+def field_value_html(v: dict) -> str:
+    value = v["value"]
+    text = "No usable value" if value is None else escape(nice(value) if isinstance(value, date) else str(value))
+    if "review" not in v:
+        return text
+    original = v["review"]["original"]
+    was = "nothing" if original is None else escape(nice(original) if isinstance(original, date) else str(original))
+    return f"{text} <small>({escape(v['review']['action'])} by you; read as {was})</small>"
+
+
 def fields_html(state: dict, name: str, info: dict) -> str:
-    labels = {"issued": "Issue date", "expires": "Expires", "good_through": "Good through", "vin": "VIN",
-              "income": "Gross pay", "payoff": "Payoff amount", "name": "Name", "address": "Address"}
     rows = "".join(
-        f"<tr><td>{labels.get(k, k)}</td>"
-        f"<td>{'No usable value' if v['value'] is None else escape(nice(v['value']) if isinstance(v['value'], date) else str(v['value']))}</td>"
+        f"<tr><td>{FIELD_NAMES.get(k, k)}</td><td>{field_value_html(v)}</td>"
         f"<td>{escape(v['evidence'])}</td></tr>"
         for k, v in info["fields"].items())
     table = f'<table class="lr-fields">{rows}</table>' if rows else '<p class="lr-note">No fields found.</p>'
@@ -313,13 +348,121 @@ def steps_html(state: dict) -> str:
             f'<p class="lr-stop">Stopped: {escape(state["stop_reason"] or "")}</p>')
 
 
+def show_request(state: dict, record_id: str) -> None:
+    """Editable request built from the items the rep picks. Nothing is sent."""
+    flagged = agent.flags(state)
+    if not flagged:
+        return
+    st.markdown('<h3 class="lr-section">Request for the member</h3>'
+                '<p class="lr-note">Pick what to ask for and edit the wording. LoanReady does not send it: '
+                'copy it into an approved MCU channel.</p>', unsafe_allow_html=True)
+    selected = st.multiselect("Items to request", [r["doc"] for r in flagged],
+                              default=[r["doc"] for r in flagged if r["status"] in checklist.ASK_STATUSES],
+                              format_func=lambda d: NAMES[d], key=f"selected-{record_id}")
+    if not selected:
+        st.markdown('<p class="lr-note">Pick at least one item to build a request.</p>', unsafe_allow_html=True)
+        return
+    saved = st.session_state.setdefault("worded", {})
+    key = f"{record_id}-{'-'.join(selected)}"
+    if harness.model_settings() and st.button("Reword with the model", key=f"reword-{key}"):
+        saved[key] = followup.draft_followup(state, selected, writer=followup.make_writer())
+    result = saved.get(key) or followup.draft_followup(state, selected)
+    if not result["draft"]:
+        st.markdown(f'<p class="lr-note">Could not build a request: {escape(result["stop_reason"])}.</p>',
+                    unsafe_allow_html=True)
+        return
+    st.text_area("Draft", result["draft"], height=220, key=f"draft-{key}-{result['source']}-{result['writes']}")
+    if result["source"] == followup.TemplateWriter.source and result["writes"] > 1:
+        st.caption("The model's wording did not pass the check, so this uses the fixed wording.")
+
+
+def show_correction(state: dict, record_id: str, visit: date) -> None:
+    """The rep corrects or rejects a value. The source document is never changed."""
+    with st.expander("Correct or reject a value"):
+        c1, c2, c3 = st.columns(3)
+        file = c1.selectbox("Document", list(state["read"]), key=f"fix-file-{record_id}")
+        field = c2.selectbox("Value", list(FIELD_NAMES), format_func=lambda f: FIELD_NAMES[f],
+                             key=f"fix-field-{record_id}")
+        action = c3.radio("Change", ["corrected", "rejected"], horizontal=True,
+                          format_func=lambda a: {"corrected": "Correct", "rejected": "Reject"}[a],
+                          key=f"fix-action-{record_id}")
+        value = st.text_input("Corrected value (dates as YYYY-MM-DD)", key=f"fix-value-{record_id}",
+                              disabled=action == "rejected")
+        if st.button("Save and recheck", key=f"fix-save-{record_id}"):
+            try:
+                review = agent.make_field_review(state, file, field, action, value)
+            except tools.ToolError as err:
+                st.markdown(f'<p class="lr-note" style="color:var(--flag)">Not saved: {escape(str(err))}.</p>',
+                            unsafe_allow_html=True)
+                return
+            store.save_field_review(state["package"], review, visit)
+            updated = agent.apply_field_reviews(state, [review], visit)
+            st.session_state["result"] = (updated, store.save_review(updated, visit), visit)
+            st.rerun()
+
+
+def open_files_html(rows: list) -> str:
+    body = []
+    for p in rows:
+        due = nice(p["next_follow_up"])
+        tag = "suggested" if p["follow_up_source"] == "suggested" else "set by you"
+        late = '<b class="flag">Overdue</b> ' if p["overdue"] else ""
+        note = f'<br><small>Note: {escape(p["notes"])}</small>' if p["notes"] else ""
+        body.append(f'<tr><td>{escape(p["package"])}</td><td>{escape(p["status"])}</td>'
+                    f'<td>{nice(p["last_activity"])}</td><td>{late}{due} <small>({tag})</small></td>'
+                    f'<td>{escape(p["next_step"])}{note}</td></tr>')
+    return ('<div class="lr-table-wrap"><table class="lr-files"><tr><th>File</th><th>Status</th>'
+            '<th>Last activity</th><th>Follow up</th><th>Next step</th></tr>'
+            f'{"".join(body)}</table></div>')
+
+
+def show_open_files(today: date) -> None:
+    state = pipeline.review_open_files(today)
+    rows = pipeline.worklist(state)
+    st.markdown('<p class="lr-note">Each open file is rechecked against the date at the top, because a document '
+                'can run out after the visit. Follow-up dates are staff reminders only, not legal deadlines. '
+                'LoanReady contacts no one.</p>', unsafe_allow_html=True)
+    if not rows:
+        st.markdown('<p class="lr-empty">No open files yet. Check a package and it shows up here.</p>',
+                    unsafe_allow_html=True)
+        return
+    if not state["stop_reason"].startswith("done"):
+        st.markdown(f'<p class="lr-note" style="color:var(--flag)">This list may be incomplete: '
+                    f'{escape(state["stop_reason"])}.</p>', unsafe_allow_html=True)
+    st.markdown(open_files_html(rows), unsafe_allow_html=True)
+    if state["not_shown"]:
+        st.markdown(f'<p class="lr-note" style="color:var(--flag)">{state["not_shown"]} more open files are '
+                    f'not shown; the list stops at {pipeline.MAX_FILES}.</p>', unsafe_allow_html=True)
+
+    plans = {p["package"]: p for p in rows}
+    st.markdown('<h3 class="lr-section">Update a file</h3>', unsafe_allow_html=True)
+    c1, c2 = st.columns(2)
+    package = c1.selectbox("File", list(plans), key="update-file")
+    plan = plans[package]
+    follow_up = c2.date_input("Next follow-up", value=plan["next_follow_up"], format="MM/DD/YYYY",
+                              key=f"update-date-{package}")
+    notes = st.text_input("Staff note", value=plan["notes"], key=f"update-notes-{package}")
+    b1, b2, _ = st.columns([1, 1, 3])
+    if b1.button("Save", key="update-save", use_container_width=True):
+        store.update_file(package, today, next_follow_up=follow_up, notes=notes)
+        st.rerun()
+    if b2.button("Close file", key="update-close", use_container_width=True):
+        store.update_file(package, today, notes=notes, close=True)
+        st.rerun()
+    with st.expander(f"How LoanReady updated this list ({len(state['log'])} steps)"):
+        st.markdown(steps_html(state), unsafe_allow_html=True)
+
+
 def show_results(state: dict, record_id: str, visit: date) -> None:
     if state["checklist"] is None:
         st.markdown(f'<div class="lr-verdict"><h2>The check did not finish.</h2>'
                     f'<p class="lr-note">Reason: {escape(state["stop_reason"] or "unknown")}. '
                     f'Check the documents by hand, or run the check again.</p></div>', unsafe_allow_html=True)
         return
-    st.markdown(verdict_html(state), unsafe_allow_html=True)
+    checked = fieldcheck.check_fields(state)
+    st.markdown(verdict_html(state, checked["findings"]), unsafe_allow_html=True)
+
+    show_request(state, record_id)
 
     st.markdown('<h3 class="lr-section">Dates against the visit</h3>'
                 '<p class="lr-note">Each bar is the period a document counts as current. '
@@ -334,8 +477,12 @@ def show_results(state: dict, record_id: str, visit: date) -> None:
         with st.expander(f"{name}: {kind}"):
             st.markdown(fields_html(state, name, info), unsafe_allow_html=True)
 
+    show_correction(state, record_id, visit)
+
     with st.expander(f"How LoanReady checked it ({len(state['log'])} steps)"):
         st.markdown(steps_html(state), unsafe_allow_html=True)
+    with st.expander(f"How LoanReady compared the values ({len(checked['log'])} steps)"):
+        st.markdown(steps_html(checked), unsafe_allow_html=True)
     st.markdown(f'<p class="lr-saved">Saved on this computer as {escape(record_id)}.</p>', unsafe_allow_html=True)
 
 
@@ -352,36 +499,43 @@ st.markdown('<p class="lr-demo">Demo with made-up documents only. Do not add rea
             'The checklist rules are our own guesses until MCU confirms them. '
             'LoanReady sends nothing and makes no loan decisions.</p>', unsafe_allow_html=True)
 
-sample_tab, upload_tab = st.tabs(["Sample package", "Member's documents"])
-package = None
-with sample_tab:
-    samples = sorted(p.name for p in tools.DATA_ROOT.iterdir() if p.is_dir())
-    c1, c2 = st.columns([3, 1], vertical_alignment="bottom")
-    with c1:
-        choice = st.selectbox("Sample package", samples,
-                              index=samples.index("pkg11") if "pkg11" in samples else 0)
-    with c2:
-        if st.button("Check package", type="primary", key="run_sample", use_container_width=True):
-            package = choice
-    if visit_date != LABEL_DATE:
-        st.caption(f"The sample answers were written for a visit on {nice(LABEL_DATE)}. "
-                   "On another date some results change, which is expected.")
-with upload_tab:
-    files = st.file_uploader("Add the member's documents as .txt files", type=["txt"],
-                             accept_multiple_files=True)
-    if st.button("Check these documents", type="primary", disabled=not files, key="run_upload"):
-        try:
-            package = store.save_uploads([(f.name, f.getvalue()) for f in files])
-        except tools.ToolError as err:
-            st.markdown(f'<p class="lr-note" style="color:var(--flag)">Could not add the files: '
-                        f'{escape(str(err))}.</p>', unsafe_allow_html=True)
+desk_tab, files_tab = st.tabs(["At the desk", "Open files"])
+with desk_tab:
+    sample_tab, upload_tab = st.tabs(["Sample package", "Member's documents"])
+    package = None
+    with sample_tab:
+        samples = sorted(p.name for p in tools.DATA_ROOT.iterdir() if p.is_dir())
+        c1, c2 = st.columns([3, 1], vertical_alignment="bottom")
+        with c1:
+            choice = st.selectbox("Sample package", samples,
+                                  index=samples.index("pkg11") if "pkg11" in samples else 0)
+        with c2:
+            if st.button("Check package", type="primary", key="run_sample", use_container_width=True):
+                package = choice
+        if visit_date != LABEL_DATE:
+            st.caption(f"The sample answers were written for a visit on {nice(LABEL_DATE)}. "
+                       "On another date some results change, which is expected.")
+    with upload_tab:
+        files = st.file_uploader("Add the member's documents as .txt files", type=["txt"],
+                                 accept_multiple_files=True)
+        if st.button("Check these documents", type="primary", disabled=not files, key="run_upload"):
+            try:
+                package = store.save_uploads([(f.name, f.getvalue()) for f in files])
+            except tools.ToolError as err:
+                st.markdown(f'<p class="lr-note" style="color:var(--flag)">Could not add the files: '
+                            f'{escape(str(err))}.</p>', unsafe_allow_html=True)
 
-if package:
-    state = agent.review(package, visit_date, planner=agent.RulePlanner())
-    st.session_state["result"] = (state, store.save_review(state, visit_date), visit_date)
-if "result" in st.session_state:
-    show_results(*st.session_state["result"])
-else:
-    st.markdown('<p class="lr-empty">Pick a sample package or add the member\'s documents, '
-                'then check them. The answer shows what to ask for before the member leaves.</p>',
-                unsafe_allow_html=True)
+    if package:
+        state = agent.review(package, visit_date, planner=agent.RulePlanner())
+        if state["checklist"] is not None:
+            # The rep's saved corrections carry over to a new check of the same file.
+            state = agent.apply_field_reviews(state, store.field_reviews(package), visit_date)
+        st.session_state["result"] = (state, store.save_review(state, visit_date), visit_date)
+    if "result" in st.session_state:
+        show_results(*st.session_state["result"])
+    else:
+        st.markdown('<p class="lr-empty">Pick a sample package or add the member\'s documents, '
+                    'then check them. The answer shows what to ask for before the member leaves.</p>',
+                    unsafe_allow_html=True)
+with files_tab:
+    show_open_files(visit_date)

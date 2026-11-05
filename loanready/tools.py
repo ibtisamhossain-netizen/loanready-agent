@@ -4,9 +4,13 @@ The agent can only call names in ALLOWED_TOOLS. Paths are validated so
 a package can only be read from inside data/synthetic/ or data/uploads/.
 Nothing here writes, sends, or calls an outside system.
 """
+from __future__ import annotations
+
 import re
 from datetime import date
 from pathlib import Path
+
+from .harness import ToolError
 
 DATA_ROOT = (Path(__file__).resolve().parent.parent / "data" / "synthetic").resolve()
 UPLOAD_ROOT = (Path(__file__).resolve().parent.parent / "data" / "uploads").resolve()
@@ -35,10 +39,6 @@ FIELD_PATTERNS = {
     # Keep blank/malformed dates visible so the checker cannot fall back silently.
     "good_through": r"^good[ -]through(?: date)?:\s*(.*)$",
 }
-
-
-class ToolError(Exception):
-    pass
 
 
 def _package_dir(package: str) -> Path:
@@ -123,8 +123,36 @@ def extract(text: str) -> dict:
     return out
 
 
+# Labels the field check looks for when the strict reader did not get a value.
+FIELD_LABELS = {
+    "name": r"name",
+    "address": r"address",
+    "vin": r"vin",
+    "income": r"gross pay",
+    "payoff": r"payoff amount",
+    "issued": r"issue date|pay date|statement date",
+    "expires": r"expires|expiration",
+    "good_through": r"good[ -]through",
+}
+
+
+def find_field_lines(package: str, name: str, field: str) -> list[str]:
+    """Lines in one document that carry a field's label, as hints for the rep.
+
+    Read-only. A hint is never used as the value: the rep reads it and decides.
+    """
+    if field not in FIELD_LABELS:
+        raise ToolError(f"unknown field: {field!r}")
+    label = re.compile(rf"^(?:{FIELD_LABELS[field]})\b", re.IGNORECASE)
+    lines = [f"line {n}: {line.strip()}"
+             for n, line in enumerate(read_document(package, name).splitlines(), start=1)
+             if label.match(line.strip())]
+    return lines[:10]
+
+
 ALLOWED_TOOLS = {
     "list_documents": list_documents,
     "read_document": read_document,
     "scan_document": scan_document,
+    "find_field_lines": find_field_lines,
 }
