@@ -70,7 +70,7 @@ The offline `RulePlanner` is used for tests and evals. `ClaudePlanner` asks the 
 
 ## Running it
 
-To see the demo screen, install `requirements.txt` and run `.venv/bin/python -m streamlit run app.py`. Pick a sample package or upload `.txt` files, and the screen shows each flag beside its source line. Uploads go to `data/uploads/` and results to `data/loanready.db`, both ignored by git. The screen uses the offline `RulePlanner`. Use synthetic documents only.
+To see the demo screen, install `requirements.txt` and run `.venv/bin/python -m streamlit run app.py`. Pick a sample package or upload `.txt` files. The screen opens with what to ask the member for, then a date ruler that shows each document's valid period against the visit day, then every extracted field beside its source line. The layout and tokens are in [docs/ui-handoff.md](docs/ui-handoff.md). Uploads go to `data/uploads/` and results to `data/loanready.db`, both ignored by git. The screen uses the offline `RulePlanner`. Use synthetic documents only.
 
 ```
 python3 scripts/make_synthetic.py   # build the 19 synthetic packages
@@ -84,7 +84,7 @@ The added cases cover a nine-day-old letter with an expired good-through date, a
 
 Packages 17 to 19 make the loop branch: a pay stub hidden under a long letterhead (scanned, recognized, checklist rerun), a pay stub with a date the strict reader skips (stays unreadable, rep gets the line), and two pay stubs in one package (sent to the rep). The eval prints each run's path and how many distinct paths were taken.
 
-Verified November 5, 2026: 51 tests passed and 19/19 synthetic packages matched their labels with 3 distinct paths, using the offline RulePlanner. These results do not measure live-model extraction or production accuracy.
+Verified November 5, 2026: 52 tests passed and 19/19 synthetic packages matched their labels with 3 distinct paths, using the offline RulePlanner. These results do not measure live-model extraction or production accuracy.
 
 ## Safety
 

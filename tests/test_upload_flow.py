@@ -71,9 +71,25 @@ def test_screen_runs_sample_and_shows_flag_with_source(tmp_path, monkeypatch):
     app = streamlit_testing.AppTest.from_file(str(PKG11.parent.parent.parent / "app.py"), default_timeout=30)
     app.run()
     assert not app.exception
-    next(b for b in app.button if b.label == "Run check on sample").click()
+    next(b for b in app.button if b.label == "Check package").click()
     app.run()
     assert not app.exception
-    flag_text = " ".join(e.value for e in app.error)
-    assert "Payoff letter: Stale" in flag_text
-    assert "line 6: Good through: 2026-11-03" in flag_text
+    page = " ".join(m.value for m in app.markdown)
+    assert "Ask the member for 1 document before they leave." in page
+    assert "A new payoff letter from the current lender." in page
+    assert "line 6: Good through: 2026-11-03" in page
+
+
+
+def test_screen_escapes_document_text(uploads, tmp_path, monkeypatch):
+    """An uploaded file's text is shown as text, never as markup."""
+    pytest.importorskip("streamlit")
+    monkeypatch.setattr(store, "DB_PATH", tmp_path / "screen.db")
+    app_id = store.save_uploads([("note.txt", b"PAY STUB\n<script>alert(1)</script>\nPay date: Oct 24, 2026\n")])
+    state = agent.review(app_id, AS_OF)
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("lr_app", PKG11.parent.parent.parent / "app.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    html = module.fields_html(state, "note.txt", state["read"]["note.txt"])
+    assert "<script>" not in html and "&lt;script&gt;" in html
