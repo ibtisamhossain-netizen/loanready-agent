@@ -21,14 +21,23 @@ MAX_AGE_DAYS = {
 EXPIRES = {"photo_id", "vehicle_registration"}
 
 
-def check(results: dict, as_of: date) -> list[dict]:
+def check(results: dict, as_of: date, conflicts: dict | None = None) -> list[dict]:
     """results maps doc_type -> extracted fields (dates as date objects).
+
+    conflicts maps doc_type -> file names when more than one file has that
+    type. The checklist never picks one: the rep decides (assumption).
 
     Returns one row per required document with status:
     ok, missing, expired, stale, or unreadable.
     """
+    conflicts = conflicts or {}
     rows = []
     for doc in REQUIRED_DOCS:
+        if doc in conflicts:
+            rows.append({"doc": doc, "status": "unreadable",
+                         "rule": f"{len(conflicts[doc])} documents of this type "
+                                 f"({', '.join(conflicts[doc])}); rep picks one"})
+            continue
         fields = results.get(doc)
         if fields is None:
             rows.append({"doc": doc, "status": "missing", "rule": "required document"})

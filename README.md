@@ -56,13 +56,15 @@ These are working guesses so the build can move. Each one gets replaced when MCU
 
 `loanready/agent.py` runs one review as a loop: observe the package state, pick one next action, run it, check the result, repeat.
 
-- Actions are allow-listed: list documents, read a document, run the checklist, finish. Anything else is refused and the run stops.
+- Actions are allow-listed: list documents, read a document, scan a document, run the checklist, finish. Anything else is refused and the run stops.
+- The path depends on what the agent finds. After the first checklist run it looks at the flags. If a required document is missing and a file was not recognized, it scans that file in full, and if the file turns out to be the missing type, it runs the checklist again. If a document is unreadable, it scans it and collects lines that look like dates as hints for the rep. Hints never pass a document. If two files have the same type, the checklist flags it for the rep instead of picking one.
+- Every pass logs the action, a short reason, and the result, and the demo screen shows them under "Agent steps".
 - Tools are read-only and can only open files inside `data/synthetic/` (`loanready/tools.py`).
-- Stop rules: done when every required document has a checklist result, a 12-pass limit, or the same action twice in a row.
+- Stop rules: done when every listed document is read and the checklist is current with a result for every required document; a pass limit set before the loop (30, with at most 12 documents per package); or the same action on the same file twice in a row. Finishing with an out-of-date checklist is reported as finishing early, not success.
 - Checklist decisions are plain code in `loanready/checklist.py`, never the model. That file is a placeholder until MCU confirms the real document list (`CONFIRMED = False`).
 - Every extracted field keeps the source line as evidence, so the rep can compare it to the original.
 - The only output is an editable draft marked DRAFT. LoanReady never sends anything.
-- Text inside a document is treated as data. Package 07 has a planted "ignore the checklist" note, and the agent still flags it.
+- Text inside a document is treated as data. Package 07 has a planted "ignore the checklist" note, and the agent still flags it. The model planner only sees file names and checklist statuses, never document text, and a test checks that.
 
 The offline `RulePlanner` is used for tests and evals. `ClaudePlanner` asks the model for the next step when `ANTHROPIC_API_KEY` and `MODEL_ID` are set in `.env` or the environment, and its choice still goes through the same allow-list. The model planner has not been tested yet.
 
@@ -71,7 +73,7 @@ The offline `RulePlanner` is used for tests and evals. `ClaudePlanner` asks the 
 To see the demo screen, install `requirements.txt` and run `.venv/bin/python -m streamlit run app.py`. Pick a sample package or upload `.txt` files, and the screen shows each flag beside its source line. Uploads go to `data/uploads/` and results to `data/loanready.db`, both ignored by git. The screen uses the offline `RulePlanner`. Use synthetic documents only.
 
 ```
-python3 scripts/make_synthetic.py   # build the 16 synthetic packages
+python3 scripts/make_synthetic.py   # build the 19 synthetic packages
 python3 scripts/eval.py             # end-to-end eval against the labels
 python3 -m pytest -q tests          # safety and loop tests
 ```
@@ -80,7 +82,9 @@ The evaluation now includes the original 10 synthetic packages plus six payoff-d
 
 The added cases cover a nine-day-old letter with an expired good-through date, ambiguous and blank dates, an invalid calendar date, validity ending today, and an older letter with an explicit later validity date. Unit tests also cover missing or duplicate dates and inconsistent issue/validity dates.
 
-Verified locally on November 4, 2026: 28 tests passed and 16/16 synthetic packages matched their labels using the offline RulePlanner. These results do not measure live-model extraction or production accuracy.
+Packages 17 to 19 make the loop branch: a pay stub hidden under a long letterhead (scanned, recognized, checklist rerun), a pay stub with a date the strict reader skips (stays unreadable, rep gets the line), and two pay stubs in one package (sent to the rep). The eval prints each run's path and how many distinct paths were taken.
+
+Verified November 5, 2026: 51 tests passed and 19/19 synthetic packages matched their labels with 3 distinct paths, using the offline RulePlanner. These results do not measure live-model extraction or production accuracy.
 
 ## Safety
 

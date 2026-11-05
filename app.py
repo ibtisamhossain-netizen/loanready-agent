@@ -15,7 +15,7 @@ from loanready import agent, checklist, store, tools
 
 ROOT = Path(__file__).resolve().parent
 LABELS = ROOT / "data" / "synthetic" / "labels.json"
-DEFAULT_VISIT = date.fromisoformat(json.loads(LABELS.read_text())["as_of"])
+LABEL_DATE = date.fromisoformat(json.loads(LABELS.read_text())["as_of"])
 STATUS = {"ok": "OK", "missing": "Missing", "expired": "Expired", "stale": "Stale", "unreadable": "Unreadable"}
 # Which extracted field a checklist rule looked at, so a flag can show its source line.
 RULE_FIELD = {"photo_id": "expires", "vehicle_registration": "expires",
@@ -45,6 +45,10 @@ def show_results(state: dict, record_id: str) -> None:
         for row in flagged:
             st.error(f"**{label(row['doc'])}: {STATUS[row['status']]}**  \nWhy: {row['rule']}  \n"
                      f"Source: `{source_line(state, row)}`")
+            hints = state["hints"].get(row["doc"])
+            if row["status"] == "unreadable" and hints is not None:
+                st.caption("Lines that look like dates, for the rep to check (not used to pass): "
+                           + ("; ".join(f"`{h}`" for h in hints) if hints else "none found"))
     else:
         st.subheader("No checklist flags")
         st.success("All 4 required documents passed the demo checklist. Verify them against the originals.")
@@ -66,8 +70,16 @@ def show_results(state: dict, record_id: str) -> None:
 
     with st.expander("Agent steps"):
         for entry in state["log"]:
-            action = entry.get("action", entry.get("refused"))
-            st.text(f"Pass {entry['pass']}: {action.get('action')} {action.get('name', '')}".rstrip())
+            line = f"Pass {entry['pass']}: {entry['action']} {entry.get('name', '')}".rstrip()
+            if entry.get("why"):
+                line += f"  (why: {entry['why']})"
+            if entry.get("result"):
+                line += f"  -> {entry['result']}"
+            if entry.get("error"):
+                line += f"  -> error: {entry['error']}"
+            if entry.get("refused"):
+                line += "  -> refused by the harness"
+            st.text(line)
         st.text(f"Stopped because: {state['stop_reason']}")
     st.caption(f"Saved locally as {record_id}.")
 
@@ -84,12 +96,15 @@ if not checklist.CONFIRMED:
                     "- **Payoff letter:** valid through its printed good-through date, counting that day\n"
                     "- **No readable date:** flagged for the rep, never passed")
 
-visit_date = st.date_input("Date of visit", value=DEFAULT_VISIT)
+visit_date = st.date_input("Date of visit", value=date.today())
 sample_tab, upload_tab = st.tabs(["Sample package", "Upload documents"])
 package = None
 with sample_tab:
     samples = sorted(p.name for p in tools.DATA_ROOT.iterdir() if p.is_dir())
     choice = st.selectbox("Synthetic package", samples, index=samples.index("pkg11") if "pkg11" in samples else 0)
+    if visit_date != LABEL_DATE:
+        st.caption(f"The sample answers were labeled for a visit on {LABEL_DATE.isoformat()}. "
+                   "On another date some results will differ, which is expected.")
     if st.button("Run check on sample", type="primary"):
         package = choice
 with upload_tab:

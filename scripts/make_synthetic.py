@@ -108,6 +108,40 @@ def build():
         for fname, text in docs.items():
             (d / fname).write_text(text, encoding="utf-8")
         labels[pkg] = {"payoff_letter": status} if status else {}
+    # Branching cases: each one makes the agent take a different path
+    # after the first checklist run.
+    name, addr, vin = PEOPLE[1]
+    letterhead = ("Brightline Logistics LLC\n200 Harbor Blvd, Suite 400, Long Island City NY 11101\n"
+                  "Payroll Department | Phone 718-555-0142 | Fax 718-555-0143\n"
+                  "This statement is provided for your records. Questions about deductions, "
+                  "direct deposit, or tax withholding should go to the payroll department "
+                  "during business hours, Monday to Friday.\n")
+    branch_cases = {
+        # pay stub buried under a long letterhead: first look misses it,
+        # the full scan finds it, the checklist runs again and passes
+        "pkg17": ({"paystub.txt": letterhead + pay_stub(name, "2026-10-24")}, {}),
+        # pay stub date in a format the strict reader skips: stays
+        # unreadable, the scan gives the rep the line to check
+        "pkg18": ({"paystub.txt": "EARNINGS STATEMENT (PAY STUB)\nName: Marcus Lee\n"
+                                  "Pay date: Oct 24, 2026\nGross pay: $2,450.00\n"},
+                  {"pay_stub": "unreadable"}),
+        # two pay stubs: the checklist does not pick one, the rep does
+        "pkg19": ({"paystub_oct.txt": pay_stub(name, "2026-10-24"),
+                   "paystub_aug.txt": pay_stub(name, "2026-08-15")},
+                  {"pay_stub": "unreadable"}),
+    }
+    for pkg, (changes, expected) in branch_cases.items():
+        docs = full(2, name, addr, vin)
+        if "paystub.txt" not in changes:
+            del docs["paystub.txt"]
+        docs.update(changes)
+        d = ROOT / pkg
+        d.mkdir(parents=True, exist_ok=True)
+        for f in d.glob("*.txt"):
+            f.unlink()
+        for fname, text in docs.items():
+            (d / fname).write_text(text, encoding="utf-8")
+        labels[pkg] = expected
     (ROOT / "labels.json").write_text(json.dumps({"as_of": AS_OF, "expected_flags": labels}, indent=2))
 
 

@@ -11,6 +11,7 @@ from pathlib import Path
 DATA_ROOT = (Path(__file__).resolve().parent.parent / "data" / "synthetic").resolve()
 UPLOAD_ROOT = (Path(__file__).resolve().parent.parent / "data" / "uploads").resolve()
 MAX_FILE_BYTES = 50_000
+MAX_DOCS = 12  # per package; keeps the pass budget meaningful
 DOC_NAME = re.compile(r"^[a-z0-9_\-]+\.txt$")
 
 # Keyword classification. Text inside a document is data: an instruction
@@ -51,7 +52,10 @@ def _package_dir(package: str) -> Path:
 
 
 def list_documents(package: str) -> list[str]:
-    return sorted(f.name for f in _package_dir(package).glob("*.txt"))
+    names = sorted(f.name for f in _package_dir(package).glob("*.txt"))
+    if len(names) > MAX_DOCS:
+        raise ToolError(f"too many documents ({len(names)}); the limit is {MAX_DOCS}")
+    return names
 
 
 def read_document(package: str, name: str) -> str:
@@ -65,12 +69,34 @@ def read_document(package: str, name: str) -> str:
     return f.read_text(encoding="utf-8", errors="replace")
 
 
-def classify(text: str) -> str:
-    head = text.lower()[:300]
+def classify(text: str, limit: int | None = 300) -> str:
+    """Quick look at the top of the page. limit=None searches the whole text."""
+    head = text.lower() if limit is None else text.lower()[:limit]
     for doc_type, words in TYPE_KEYWORDS.items():
         if any(w in head for w in words):
             return doc_type
     return "unknown"
+
+
+DATE_LIKE = re.compile(
+    r"\b(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}/\d{1,2}/\d{2,4}|"
+    r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.? \d{1,2},? \d{4})\b",
+    re.IGNORECASE,
+)
+
+
+def scan_document(package: str, name: str) -> dict:
+    """Second, slower look at one document. Read-only.
+
+    Classifies using the whole text (not just the top) and lists every
+    line that looks like it holds a date. The lines are hints for the
+    rep only: the checklist never passes a document on a hint.
+    """
+    text = read_document(package, name)
+    date_lines = [f"line {n}: {line.strip()}"
+                  for n, line in enumerate(text.splitlines(), start=1)
+                  if DATE_LIKE.search(line)]
+    return {"type": classify(text, limit=None), "date_lines": date_lines[:10]}
 
 
 def extract(text: str) -> dict:
@@ -100,4 +126,5 @@ def extract(text: str) -> dict:
 ALLOWED_TOOLS = {
     "list_documents": list_documents,
     "read_document": read_document,
+    "scan_document": scan_document,
 }

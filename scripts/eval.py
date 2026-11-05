@@ -17,18 +17,23 @@ LABELS = Path(__file__).resolve().parent.parent / "data" / "synthetic" / "labels
 def main():
     data = json.loads(LABELS.read_text())
     as_of = date.fromisoformat(data["as_of"])
-    passed, failed = 0, []
+    passed, failed, paths = 0, [], set()
     for pkg, expected in data["expected_flags"].items():
         state = agent.review(pkg, as_of, planner=agent.RulePlanner())
         got = {r["doc"]: r["status"] for r in agent.flags(state)}
         ok = got == expected and state["stop_reason"].startswith("done")
         passed += ok
+        # the shape of the run, ignoring which file was read
+        path = tuple(e["action"] for e in state["log"] if e["action"] != "read_document")
+        paths.add(path)
         mark = "PASS" if ok else "FAIL"
-        print(f"{mark} {pkg}: expected {expected or 'no flags'} | got {got or 'no flags'} | {state['stop_reason']}")
+        print(f"{mark} {pkg}: expected {expected or 'no flags'} | got {got or 'no flags'} | "
+              f"{len(state['log'])} passes: {' > '.join(path)} | {state['stop_reason']}")
         if not ok:
             failed.append(pkg)
     total = len(data["expected_flags"])
     print(f"\nEnd-to-end success: {passed}/{total} (regression gate: all packages pass)")
+    print(f"Distinct paths taken: {len(paths)} (a fixed chain would show 1)")
     return 0 if total > 0 and not failed else 1
 
 

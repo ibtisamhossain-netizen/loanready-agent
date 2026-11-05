@@ -45,6 +45,8 @@ def save_uploads(files: list) -> str:
     """Save (name, bytes) pairs in a new application folder and return its id."""
     if not files:
         raise tools.ToolError("no documents uploaded")
+    if len(files) > tools.MAX_DOCS:
+        raise tools.ToolError(f"too many documents ({len(files)}); the limit is {tools.MAX_DOCS}")
     cleaned = {}
     for name, data in files:
         safe = clean_name(name)

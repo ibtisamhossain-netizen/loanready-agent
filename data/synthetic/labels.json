@@ -39,6 +39,13 @@
     "pkg15": {
       "payoff_letter": "unreadable"
     },
-    "pkg16": {}
+    "pkg16": {},
+    "pkg17": {},
+    "pkg18": {
+      "pay_stub": "unreadable"
+    },
+    "pkg19": {
+      "pay_stub": "unreadable"
+    }
   }
 }
