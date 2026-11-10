@@ -49,7 +49,20 @@
     },
     "pkg20": {},
     "pkg21": {},
-    "pkg22": {}
+    "pkg22": {},
+    "pkg23": {
+      "insurance_card": "missing"
+    },
+    "pkg24": {
+      "insurance_card": "expired"
+    },
+    "pkg25": {
+      "insurance_card": "unreadable"
+    },
+    "pkg26": {
+      "title": "missing"
+    },
+    "pkg27": {}
   },
   "expected_field_findings": {
     "pkg20": [
@@ -60,6 +73,9 @@
     ],
     "pkg22": [
       "missing_field:vin"
+    ],
+    "pkg27": [
+      "mismatch:vin"
     ]
   }
 }

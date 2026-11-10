@@ -12,7 +12,18 @@ from datetime import date, timedelta
 
 CONFIRMED = False  # flip only after MCU operations signs off
 
-REQUIRED_DOCS = ["photo_id", "pay_stub", "vehicle_registration", "payoff_letter"]
+REQUIRED_DOCS = ["photo_id", "pay_stub", "vehicle_registration", "payoff_letter",
+                 "insurance_card", "title"]
+
+# insurance_card and title come from the team's research (Priscilla Batroni,
+# Nov 10, 2026), which found both on MCU's real auto-refinance checklist.
+# Both rules are ASSUMPTIONS (guesses), not confirmed with MCU operations:
+#   - insurance_card: required, and must be unexpired on the visit date, like
+#     the photo ID. The research does not say how current it must be. (assumption)
+#   - title (NY Certificate of Title): required for every package. MCU's checklist
+#     says NY vehicles, but synthetic registrations record no state, so the demo
+#     asks every package for one. Presence is enough: no date rule. (assumption)
+# The pay stub and photo ID rules are unchanged: those questions are still open.
 
 # Max age in days, counted from the document's issue date (assumption)
 MAX_AGE_DAYS = {
@@ -20,7 +31,7 @@ MAX_AGE_DAYS = {
 }
 
 # Documents with an expiry date that must still be valid (assumption)
-EXPIRES = {"photo_id", "vehicle_registration"}
+EXPIRES = {"photo_id", "vehicle_registration", "insurance_card"}
 
 # Statuses the rep asks the member to fix. Anything else the rep reads first.
 ASK_STATUSES = {"missing", "expired", "stale"}
@@ -31,12 +42,16 @@ REQUIRED_FIELDS = {
     "pay_stub": ["name", "issued", "income"],
     "vehicle_registration": ["name", "vin", "expires"],
     "payoff_letter": ["name", "vin", "issued", "payoff", "good_through"],
+    "insurance_card": ["name", "expires"],
+    "title": ["name", "vin"],
 }
 
-# Values that must agree wherever they appear (assumption)
+# Values that must agree wherever they appear (assumption). The insurance card
+# is not in the name comparison: the research does not say whose name must be
+# on the policy, so a difference there is not treated as a mismatch (assumption).
 COMPARED_FIELDS = {
-    "name": set(REQUIRED_DOCS),
-    "vin": {"vehicle_registration", "payoff_letter"},
+    "name": set(REQUIRED_DOCS) - {"insurance_card"},
+    "vin": {"vehicle_registration", "payoff_letter", "title"},
 }
 
 # Days after the last activity to look at an open file again (assumption). This

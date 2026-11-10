@@ -9,7 +9,7 @@ Each story names the line it comes from. Stories with no source are labeled as a
 As an MCU Member Service Representative, I need to see which required auto-refinance documents are missing, expired, or stale while the member is at my desk, so that I can ask for them before the member leaves.
 
 - Source: JD "accurate first-time documentation"; PRD Problem; PRD Key User Need 1.
-- Demo test: correct flags on at least 9 of 10 labeled synthetic files (PRD target). The eval now requires all 22 synthetic packages to pass.
+- Demo test: correct flags on at least 9 of 10 labeled synthetic files (PRD target). The eval now requires all 27 synthetic packages to pass.
 - Depends on: the checklist rules (see Story 5).
 
 ## Story 2: Check extracted fields against the source
@@ -40,7 +40,7 @@ As an MCU QA reviewer, I need to maintain the checklist and freshness rules, so 
 - Source: PRD secondary users. The exact checklist and freshness rules are not confirmed with MCU operations yet (PRD Risks).
 - Status: assumption. Not in the first build. Stories 1 and 2 depend on it, so the first build uses a placeholder checklist file that is clearly marked as unconfirmed.
 - What would confirm it: MCU operations shares the auto-refinance document list and its date rules.
-- Partly answered (Priscilla Batroni, Nov 10, 2026): MCU's checklist adds an insurance card and a NY Certificate of Title, does not list the pay stub or photo ID, and calls the payoff document a "10-Day Payoff Letter". Income and ID are still being confirmed, and the code is not updated yet.
+- Partly answered (Priscilla Batroni, Nov 10, 2026): MCU's checklist adds an insurance card and a NY Certificate of Title, does not list the pay stub or photo ID, and calls the payoff document a "10-Day Payoff Letter". Income and ID are still being confirmed. On the `checklist/mcu-insurance-title` branch, the insurance card and title are in the checklist with guessed rules (the card must be unexpired on the visit date; every package needs a title, with no date rule), still marked `CONFIRMED = False`. The pay stub and photo ID rules are unchanged.
 - Note: the revised PRD (Nov 4) dropped the secondary user and lists checklist maintenance as a non-goal.
 
 ## Where the agents fit

@@ -26,6 +26,8 @@ TYPE_KEYWORDS = {
     "pay_stub": ["pay stub", "earnings statement"],
     "vehicle_registration": ["vehicle registration"],
     "payoff_letter": ["payoff letter", "payoff quote"],
+    "insurance_card": ["insurance card", "insurance id card", "proof of insurance"],
+    "title": ["certificate of title"],
 }
 
 FIELD_PATTERNS = {

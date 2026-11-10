@@ -37,7 +37,7 @@ Pursuit L2 Cycle 4 project by Ibtisam Hossain (build) and Priscilla Batroni (res
 - **Anthropic API** through the `anthropic` Python SDK (0.125), calling the model set in `MODEL_ID` (`claude-sonnet-5-5` in `.env.example`) with JSON-schema structured output. It is optional. On the screen it only rewords the follow-up draft; the Claude planners are built and tested but not connected to the screen yet.
 - **SQLite** (Python's built-in `sqlite3`) for saved checks, open files and the rep's corrections, stored locally
 - **python-dotenv** to load the API key from a local `.env`
-- **pytest** for 109 tests, plus `scripts/eval.py`, an end-to-end eval over 22 synthetic packages
+- **pytest** for 133 tests, plus `scripts/eval.py`, an end-to-end eval over 27 synthetic packages
 
 ## Try it
 
@@ -53,22 +53,22 @@ Pick a sample package and click Check package. To reproduce the labeled results,
 
 ## Status
 
-These checks show the tool behaves as designed; they don't show how accurate it would be on real MCU files. Verified November 5, 2026 on Python 3.9.6: 109 tests passed and 22/22 synthetic packages matched their labels, using the built-in rules with no AI key. These numbers check that the loop behaves as designed, not real-world accuracy, because the rules and the labels were written together. The JD's 95%+ QA target has not been measured yet: it needs field-level labels written by someone other than the person who wrote the rules. One live run on Claude was done by hand and has no saved log (see Running the checks).
+These checks show the tool behaves as designed; they don't show how accurate it would be on real MCU files. Verified November 10, 2026 on Python 3.9.6, on the `checklist/mcu-insurance-title` branch: 133 tests passed and 27/27 synthetic packages matched their labels, using the built-in rules with no AI key. These numbers check that the loop behaves as designed, not real-world accuracy, because the rules and the labels were written together. The JD's 95%+ QA target has not been measured yet: it needs field-level labels written by someone other than the person who wrote the rules. One live run on Claude was done by hand and has no saved log (see Running the checks).
 
 Built: stories 1 to 4 (listed below) on the local demo screen. That covers flags with their reasons, fields beside their source lines, correcting or rejecting a value, the open-file list, and editable follow-up drafts.
 
-Not built: PDFs and photos, marking a requested document as received, the checklist-maintenance screen, and the checklist changes from the research below.
+Not built: PDFs and photos, marking a requested document as received, the checklist-maintenance screen, and the pay stub and photo ID changes from the research below.
 
-## What the research found (not yet in the code)
+## What the research found
 
 Priscilla Batroni reviewed MCU's real auto-refinance requirements on November 10, 2026:
 
-- MCU's checklist asks for two documents LoanReady does not check: an insurance card, and a NY Certificate of Title for NY vehicles.
+- MCU's checklist asks for two documents LoanReady did not check: an insurance card, and a NY Certificate of Title for NY vehicles.
 - MCU's checklist does not list the pay stub or photo ID that LoanReady requires.
 - MCU calls the payoff document a "10-Day Payoff Letter".
 - The income and ID questions are still being confirmed, from MCU's refinance application and by calling MCU.
 
-The code still uses the placeholder list in `loanready/checklist.py`, marked `CONFIRMED = False`. Ibtisam and Priscilla will update the checklist together once the income and ID questions are answered.
+On the `checklist/mcu-insurance-title` branch, the insurance card and the certificate of title are now in the checklist. Their date and scope rules are guesses (see Assumptions in the code). The pay stub and photo ID rules are unchanged until the income and ID questions are answered. The checklist in `loanready/checklist.py` is still marked `CONFIRMED = False`.
 
 ## User stories
 
@@ -106,7 +106,10 @@ Story 1 (catch missing, expired, or stale documents during the visit) is built f
 
 These are working guesses so the build can move. The research above already contradicts some of them, and each one gets replaced when MCU confirms the real answer.
 
-- The required documents are photo ID, pay stub, vehicle registration, and a payoff letter from the current lender. MCU's real checklist differs (see What the research found).
+- The required documents are photo ID, pay stub, vehicle registration, a payoff letter from the current lender, an insurance card, and a NY Certificate of Title. MCU's real checklist differs on the pay stub and photo ID (see What the research found).
+- The insurance card must be unexpired on the day of the check, like the photo ID. This is a guess: the research does not say how current it must be. A card with no readable expiry date is flagged "unreadable".
+- Every package needs a certificate of title, and having one is enough (no date rule). This is a guess: MCU's checklist asks for it for NY vehicles, but the synthetic registrations record no state, so LoanReady cannot tell which vehicles are from NY. The title's VIN is compared with the registration and payoff letter, and its name with the other documents.
+- The insurance card's name is not compared with the other documents, because the research does not say whose name must be on the policy. This is also a guess.
 - A pay stub counts as stale after 30 days from its issue date. MCU's checklist may not require a pay stub at all; this is being confirmed.
 - A payoff letter is valid through its printed good-through date, counting that day. MCU calls it a "10-Day Payoff Letter". LoanReady does not enforce any issue-age limit, and whether MCU wants one is still to be confirmed.
 - Missing, blank, invalid, ambiguous, or repeated good-through dates require rep review (`unreadable`). No guessed date and no fallback to issue age. The original source line is retained. An issue date in the future or after the good-through date also requires review.
@@ -161,13 +164,15 @@ The offline `RulePlanner` is used for tests and evals. `ClaudePlanner` asks the 
 
 Uploads go to `data/uploads/` and results to `data/loanready.db`, both ignored by git. The screen's check uses the offline `RulePlanner`. When a key is set, a "Reword with the model" button can word the draft. The screen loads the Public Sans font from Google Fonts; no member data or document text is sent anywhere.
 
-The eval runs 22 synthetic packages: 10 originals, 6 payoff-date regressions (11 to 16), 3 branching cases (17 to 19), and 3 field-check cases (20 to 22). Every package must pass. Real accuracy needs MCU's checklist and documents labeled by someone else.
+The eval runs 27 synthetic packages: 10 originals, 6 payoff-date regressions (11 to 16), 3 branching cases (17 to 19), 3 field-check cases (20 to 22), and 5 insurance card and title cases (23 to 27). Every package has all six documents unless a case removes one, and every package must pass. Real accuracy needs MCU's checklist and documents labeled by someone else.
 
 The payoff-date cases cover a nine-day-old letter with an expired good-through date, ambiguous and blank dates, an invalid calendar date, validity ending today, and an older letter with an explicit later validity date. Unit tests also cover missing or duplicate dates and inconsistent issue/validity dates.
 
 Packages 17 to 19 make the loop branch: a pay stub hidden under a long letterhead (scanned, recognized, checklist rerun), a pay stub with a date the strict reader skips (stays unreadable, rep gets the line), and two pay stubs in one package (sent to the rep). The eval prints each run's path and how many distinct paths were taken.
 
 Packages 20 to 22 pass the checklist but fail the field check: a payoff letter with another vehicle's VIN, a pay stub in another name, and a VIN one character short. The eval also requires a passing follow-up draft, written by the fixed template, for every package with a checklist flag.
+
+Packages 23 to 27 each change one thing: no insurance card (missing), an insurance card that expired before the visit (expired), an insurance card whose expiry date the strict reader cannot use (unreadable, rep gets the line), no certificate of title (missing), and a title with another vehicle's VIN (passes the checklist, the field check flags the VIN).
 
 One live run on `claude-sonnet-5-5` was done by hand on November 5, 2026, and no log of it is saved in the repo. In that run, the model planners for the review, field check and open-files agents finished on four packages with the same review flags as the offline planner, and the follow-up writer's drafts on two packages passed the check. This does not measure live-model reliability or production accuracy. The 95% field-accuracy metric still needs field-level labels, written by someone other than the person who wrote the rules.
 

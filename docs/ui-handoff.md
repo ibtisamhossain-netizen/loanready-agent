@@ -73,10 +73,10 @@ Status is never shown by color alone: every colored square or bar has a word bes
 | Verdict | Clear | "Nothing to ask for." + green line telling the rep to compare with originals | |
 | Verdict | Did not finish | "The check did not finish." + stop reason + what to do | Shown when the agent stopped without a checklist |
 | Ask item | per status | Sentence of what to ask for, then a "why" line with the real date | Wording is built in `ask_sentence()`; quotes the source line for unreadable dates |
-| Date ruler row | expiry doc | Bar from the left edge to the expiry date | Photo ID, registration |
+| Date ruler row | expiry doc | Bar from the left edge to the expiry date | Photo ID, registration, insurance card |
 | Date ruler row | pay stub | Bar from issue date to issue + 30 days | Window length from `checklist.MAX_AGE_DAYS` |
 | Date ruler row | payoff letter | Bar from statement date to good-through date | Falls back to a dot at good-through if the statement date is missing or later |
-| Date ruler row | no bar | "Not in the package", "No readable date", or "Two documents of this type" | |
+| Date ruler row | no bar | "Not in the package", "No readable date", "Two documents of this type", or "In the package; no date rule" | The last is the certificate of title, which has no date rule |
 | Document expander | per file | Field table (field, value, source line) + the original text | Unrecognized files say "Not recognized, not counted" |
 | Steps expander | | Numbered list: plain-language action, reason, result | Numbered because the steps are a real sequence |
 

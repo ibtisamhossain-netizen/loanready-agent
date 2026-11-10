@@ -27,6 +27,8 @@ LABELS = {
     "pay_stub": "pay stub",
     "vehicle_registration": "vehicle registration",
     "payoff_letter": "payoff letter",
+    "insurance_card": "insurance card",
+    "title": "certificate of title",
 }
 # A draft must not decide anything, promise anything, or invent contact details.
 FORBIDDEN = {

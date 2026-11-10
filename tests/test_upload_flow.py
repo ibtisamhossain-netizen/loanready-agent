@@ -31,8 +31,9 @@ def test_uploaded_package_runs_end_to_end_and_saves(uploads):
     conn = sqlite3.connect(db)
     try:
         assert conn.execute("SELECT status FROM application WHERE id = ?", (record,)).fetchone() == ("needs review",)
-        assert conn.execute("SELECT count(*) FROM document").fetchone() == (4,)
-        assert conn.execute("SELECT count(*) FROM checklist_result").fetchone() == (4,)
+        # six files, one checklist row per required document (six since the Nov 10 research)
+        assert conn.execute("SELECT count(*) FROM document").fetchone() == (6,)
+        assert conn.execute("SELECT count(*) FROM checklist_result").fetchone() == (6,)
         assert conn.execute("SELECT source_line FROM extracted_field WHERE field_name = 'good_through'"
                             ).fetchone() == ("line 6: Good through: 2026-11-03",)
     finally:

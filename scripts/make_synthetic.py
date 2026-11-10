@@ -32,12 +32,25 @@ def payoff(name, vin, issued, amount="14,320.55", good_through=None):
             f"Payoff amount: ${amount}\nGood through: {good_through}\n")
 
 
+def insurance_card(name, vin, expires=None):
+    # expires=None writes an expiry line the strict reader cannot use.
+    line = f"Expires: {expires}" if expires else "Expires: 5/31/27"
+    return (f"AUTO INSURANCE CARD (PROOF OF INSURANCE)\nInsurer: Harborview Mutual (sample)\n"
+            f"Name: {name}\nVIN: {vin}\n{line}\n")
+
+
+def title(name, vin):
+    return f"NEW YORK CERTIFICATE OF TITLE (SAMPLE)\nName: {name}\nVIN: {vin}\n"
+
+
 def full(n, name, addr, vin):
     return {
         "id.txt": photo_id(name, addr, "2029-05-01"),
         "paystub.txt": pay_stub(name, "2026-10-24"),
         "registration.txt": registration(name, vin, "2027-08-31"),
         "payoff.txt": payoff(name, vin, "2026-11-01"),
+        "insurance.txt": insurance_card(name, vin, "2027-04-30"),
+        "title.txt": title(name, vin),
     }
 
 
@@ -166,6 +179,39 @@ def build():
             (d / fname).write_text(text, encoding="utf-8")
         labels[pkg] = {}
         findings[pkg] = expected
+    # Insurance card and title cases (research, Nov 10, 2026): one change each.
+    # The rules behind them are assumptions; see loanready/checklist.py.
+    name, addr, vin = PEOPLE[4]
+    other_vin = PEOPLE[5][2]
+    mcu_cases = {
+        # no insurance card
+        "pkg23": ({"insurance.txt": None}, {"insurance_card": "missing"}, []),
+        # insurance card expired before the visit
+        "pkg24": ({"insurance.txt": insurance_card(name, vin, "2026-10-15")},
+                  {"insurance_card": "expired"}, []),
+        # insurance card expiry in a format the strict reader skips
+        "pkg25": ({"insurance.txt": insurance_card(name, vin)}, {"insurance_card": "unreadable"}, []),
+        # no certificate of title
+        "pkg26": ({"title.txt": None}, {"title": "missing"}, []),
+        # title for a different vehicle: the checklist passes, the field check flags it
+        "pkg27": ({"title.txt": title(name, other_vin)}, {}, ["mismatch:vin"]),
+    }
+    for pkg, (changes, expected, found) in mcu_cases.items():
+        docs = full(5, name, addr, vin)
+        for fname, text in changes.items():
+            if text is None:
+                del docs[fname]
+            else:
+                docs[fname] = text
+        d = ROOT / pkg
+        d.mkdir(parents=True, exist_ok=True)
+        for f in d.glob("*.txt"):
+            f.unlink()
+        for fname, text in docs.items():
+            (d / fname).write_text(text, encoding="utf-8")
+        labels[pkg] = expected
+        if found:
+            findings[pkg] = found
     (ROOT / "labels.json").write_text(json.dumps(
         {"as_of": AS_OF, "expected_flags": labels, "expected_field_findings": findings}, indent=2))
 

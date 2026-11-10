@@ -27,10 +27,13 @@ STATUS = {"ok": "Passes", "missing": "Missing", "expired": "Expired", "stale": "
           "unreadable": "Needs your check"}
 TONE = {"ok": "pass", "missing": "flag", "expired": "flag", "stale": "flag", "unreadable": "review"}
 NAMES = {"photo_id": "Photo ID", "pay_stub": "Pay stub", "vehicle_registration": "Vehicle registration",
-         "payoff_letter": "Payoff letter"}
+         "payoff_letter": "Payoff letter", "insurance_card": "Insurance card",
+         "title": "Certificate of title"}
 # Which extracted field a checklist rule looked at, so a flag can show its source line.
+# The title has no date rule (presence is enough), so it has no entry.
 RULE_FIELD = {"photo_id": "expires", "vehicle_registration": "expires",
-              "pay_stub": "issued", "payoff_letter": "good_through"}
+              "pay_stub": "issued", "payoff_letter": "good_through",
+              "insurance_card": "expires"}
 STEP_NAMES = {"list_documents": "Listed the documents", "read_document": "Read",
               "scan_document": "Took a second look at", "run_checklist": "Ran the checklist",
               "compare_field": "Compared the", "find_gaps": "Looked for values it could not read",
@@ -157,7 +160,7 @@ def doc_fields(state: dict, doc_type: str):
 
 def source_line(state: dict, row: dict) -> str | None:
     name, fields = doc_fields(state, row["doc"])
-    field = (fields or {}).get(RULE_FIELD[row["doc"]])
+    field = (fields or {}).get(RULE_FIELD.get(row["doc"], ""))
     return field["evidence"] if field else None
 
 
@@ -174,7 +177,8 @@ def ask_sentence(state: dict, row: dict) -> tuple[str, str]:
     _, fields = doc_fields(state, doc)
     get = lambda k: ((fields or {}).get(k) or {}).get("value")
     if status == "missing":
-        return f"A {name}.", "None was in the package."
+        article = "An" if name[0] in "aeiou" else "A"
+        return f"{article} {name}.", "None was in the package."
     if status == "expired":
         exp = get("expires")
         return f"An unexpired {name}.", f"This one expired {nice(exp)}." if exp else escape(row["rule"])
@@ -226,7 +230,7 @@ def verdict_html(state: dict, findings: list | None = None) -> str:
 
     if not ask and not check:
         return ('<div class="lr-verdict"><h2>Nothing to ask for.</h2>'
-                '<p class="lr-clear">All four documents pass the demo checklist. '
+                '<p class="lr-clear">Every required document passes the demo checklist. '
                 'Compare them with the originals before the member leaves.</p></div>')
     n = len(ask)
     c = len(check)
@@ -283,6 +287,7 @@ def ruler_html(state: dict, visit: date) -> str:
                 track = bar(first, gt, pct, tone, text, end)
         if not track:
             note = {"missing": "Not in the package",
+                    "ok": "In the package; no date rule",
                     "unreadable": "Two documents of this type" if doc in state["conflicts"] else "No readable date"
                     }.get(status, "")
             track = f'<span class="lr-none">{note}</span>'
