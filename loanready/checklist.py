@@ -49,6 +49,8 @@ REQUIRED_FIELDS = {
 # Values that must agree wherever they appear (assumption). The insurance card
 # is not in the name comparison: the research does not say whose name must be
 # on the policy, so a difference there is not treated as a mismatch (assumption).
+# Its VIN is not compared either: the research does not say the card must list
+# the vehicle, so a card for another vehicle is not flagged (assumption).
 COMPARED_FIELDS = {
     "name": set(REQUIRED_DOCS) - {"insurance_card"},
     "vin": {"vehicle_registration", "payoff_letter", "title"},

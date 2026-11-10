@@ -90,6 +90,45 @@ def test_classification_keywords():
     assert tools.classify("NEW YORK CERTIFICATE OF TITLE\nName: X\n") == "title"
     # the older types still win on their own words
     assert tools.classify("VEHICLE REGISTRATION\nName: X\n") == "vehicle_registration"
+    # wording NY insurance ID cards commonly use
+    assert tools.classify("NEW YORK AUTOMOBILE INSURANCE IDENTIFICATION CARD\nName: A\n") == "insurance_card"
+
+
+def test_a_document_is_named_by_its_header_not_by_what_it_mentions():
+    # payoff letters often mention the title and insurance in their text
+    assert tools.classify("PAYOFF LETTER\nThe lien on the certificate of title will be "
+                          "released. Proof of insurance is not needed.\n") == "payoff_letter"
+    assert tools.classify("NEW YORK CERTIFICATE OF TITLE\nVehicle registration class: PAS\n") == "title"
+    assert tools.classify("AUTO INSURANCE CARD\nDriver license required to drive.\n") == "insurance_card"
+    assert tools.classify("VEHICLE REGISTRATION\nKeep proof of insurance in the car.\n") == "vehicle_registration"
+
+
+def test_a_mention_of_the_title_or_insurance_below_the_header_never_names_the_document():
+    text = ("PAYOFF STATEMENT\nLender lien on the certificate of title is released "
+            "on payment. Proof of insurance on file.\n")
+    assert tools.classify(text) == "unknown"
+    assert tools.classify(text, limit=None) == "unknown"
+
+
+def test_older_types_still_found_below_the_header():
+    # the earliest keyword wins when the header names nothing
+    text = "Acme Payroll\nEarnings statement (pay stub). Bring your driver license.\n"
+    assert tools.classify(text) == "pay_stub"
+
+
+def test_payoff_statement_mentioning_the_title_is_left_for_the_rep(tmp_path, monkeypatch):
+    monkeypatch.setattr(tools, "UPLOAD_ROOT", tmp_path.resolve())
+    pkg = tmp_path / "probe"
+    pkg.mkdir()
+    for f in (ROOT / "data" / "synthetic" / "pkg01").glob("*.txt"):
+        (pkg / f.name).write_text(f.read_text())
+    (pkg / "payoff.txt").write_text(
+        "PAYOFF STATEMENT\nLender lien on the certificate of title is released on payment.\n")
+    state = agent.review("probe", AS_OF)
+    assert state["read"]["payoff.txt"]["type"] == "unknown"
+    rows = {r["doc"]: r["status"] for r in state["checklist"]}
+    assert rows["title"] == "ok"
+    assert rows["payoff_letter"] == "missing"
 
 
 # ---------- the packages ----------

@@ -26,9 +26,17 @@ TYPE_KEYWORDS = {
     "pay_stub": ["pay stub", "earnings statement"],
     "vehicle_registration": ["vehicle registration"],
     "payoff_letter": ["payoff letter", "payoff quote"],
-    "insurance_card": ["insurance card", "insurance id card", "proof of insurance"],
+    "insurance_card": ["insurance card", "insurance id card",
+                       "insurance identification card", "proof of insurance"],
     "title": ["certificate of title"],
 }
+
+# Other documents often mention these two in their body text ("the lien on
+# the certificate of title is released", "proof of insurance is required"),
+# so their keywords only count in the document's header, its first non-blank
+# line. A real card or title with another first line is left unknown, and the
+# rep reads it (assumption).
+HEADER_ONLY = {"insurance_card", "title"}
 
 FIELD_PATTERNS = {
     "name": r"^name:\s*(.+)$",
@@ -74,10 +82,24 @@ def read_document(package: str, name: str) -> str:
 def classify(text: str, limit: int | None = 300) -> str:
     """Quick look at the top of the page. limit=None searches the whole text."""
     head = text.lower() if limit is None else text.lower()[:limit]
-    for doc_type, words in TYPE_KEYWORDS.items():
-        if any(w in head for w in words):
-            return doc_type
-    return "unknown"
+    header = next((line for line in head.splitlines() if line.strip()), "")
+    # The header decides first. Otherwise the keyword that appears earliest
+    # wins, so a word a document merely mentions lower down cannot outrank
+    # the word that names it.
+    return (_earliest(header, TYPE_KEYWORDS)
+            or _earliest(head, {t: w for t, w in TYPE_KEYWORDS.items()
+                                if t not in HEADER_ONLY})
+            or "unknown")
+
+
+def _earliest(text: str, keywords: dict) -> str | None:
+    best = None  # (position, dict order, doc_type)
+    for order, (doc_type, words) in enumerate(keywords.items()):
+        for w in words:
+            pos = text.find(w)
+            if pos >= 0 and (best is None or (pos, order) < best[:2]):
+                best = (pos, order, doc_type)
+    return best[2] if best else None
 
 
 DATE_LIKE = re.compile(

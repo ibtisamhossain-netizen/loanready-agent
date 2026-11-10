@@ -6,11 +6,11 @@ The AI never sees member information, never decides anything, and never sends an
 
 ![The At the desk screen after checking a synthetic package](docs/screenshots/at-the-desk.png)
 
-*The At the desk screen on synthetic package pkg05, with the visit date set to Nov 4, 2026. All names, dates and VINs are made up. An API key was set, which adds the Reword with the model button.*
+*The At the desk screen on synthetic package pkg05, with the visit date set to Nov 4, 2026. All names, dates and VINs are made up. An API key was set, which adds the Reword with the model button. Taken before the insurance card and title were added, so it shows four documents, not six.*
 
 ![The date ruler and the payoff letter's values beside their source lines](docs/screenshots/dates-and-sources.png)
 
-*Further down the same screen: each document's valid period against the visit date, and every value from the payoff letter beside the line it came from.*
+*Further down the same screen: each document's valid period against the visit date, and every value from the payoff letter beside the line it came from. Also taken before the insurance card and title were added: the ruler now has six rows.*
 
 ## The problem
 
@@ -37,7 +37,7 @@ Pursuit L2 Cycle 4 project by Ibtisam Hossain (build) and Priscilla Batroni (res
 - **Anthropic API** through the `anthropic` Python SDK (0.125), calling the model set in `MODEL_ID` (`claude-sonnet-5-5` in `.env.example`) with JSON-schema structured output. It is optional. On the screen it only rewords the follow-up draft; the Claude planners are built and tested but not connected to the screen yet.
 - **SQLite** (Python's built-in `sqlite3`) for saved checks, open files and the rep's corrections, stored locally
 - **python-dotenv** to load the API key from a local `.env`
-- **pytest** for 133 tests, plus `scripts/eval.py`, an end-to-end eval over 27 synthetic packages
+- **pytest** for 137 tests, plus `scripts/eval.py`, an end-to-end eval over 27 synthetic packages
 
 ## Try it
 
@@ -53,11 +53,11 @@ Pick a sample package and click Check package. To reproduce the labeled results,
 
 ## Status
 
-These checks show the tool behaves as designed; they don't show how accurate it would be on real MCU files. Verified November 10, 2026 on Python 3.9.6, on the `checklist/mcu-insurance-title` branch: 133 tests passed and 27/27 synthetic packages matched their labels, using the built-in rules with no AI key. These numbers check that the loop behaves as designed, not real-world accuracy, because the rules and the labels were written together. The JD's 95%+ QA target has not been measured yet: it needs field-level labels written by someone other than the person who wrote the rules. One live run on Claude was done by hand and has no saved log (see Running the checks).
+These checks show the tool behaves as designed; they don't show how accurate it would be on real MCU files. Verified November 10, 2026 on Python 3.9.6, on the `checklist/mcu-insurance-title` branch: 137 tests passed and 27/27 synthetic packages matched their labels, using the built-in rules with no AI key. These numbers check that the loop behaves as designed, not real-world accuracy, because the rules and the labels were written together. The JD's 95%+ QA target has not been measured yet: it needs field-level labels written by someone other than the person who wrote the rules. One live run on Claude was done by hand and has no saved log (see Running the checks).
 
 Built: stories 1 to 4 (listed below) on the local demo screen. That covers flags with their reasons, fields beside their source lines, correcting or rejecting a value, the open-file list, and editable follow-up drafts.
 
-Not built: PDFs and photos, marking a requested document as received, the checklist-maintenance screen, and the pay stub and photo ID changes from the research below.
+Not built: PDFs and photos, marking a requested document as received, the checklist-maintenance screen, and, from the research below, the pay stub and photo ID changes, limiting the title to NY vehicles, and any 10-day limit on the payoff letter.
 
 ## What the research found
 
@@ -106,10 +106,11 @@ Story 1 (catch missing, expired, or stale documents during the visit) is built f
 
 These are working guesses so the build can move. The research above already contradicts some of them, and each one gets replaced when MCU confirms the real answer.
 
-- The required documents are photo ID, pay stub, vehicle registration, a payoff letter from the current lender, an insurance card, and a NY Certificate of Title. MCU's real checklist differs on the pay stub and photo ID (see What the research found).
-- The insurance card must be unexpired on the day of the check, like the photo ID. This is a guess: the research does not say how current it must be. A card with no readable expiry date is flagged "unreadable".
+- The required documents are photo ID, pay stub, vehicle registration, a payoff letter from the current lender, an insurance card, and a NY Certificate of Title. MCU's real checklist differs on the pay stub and photo ID, and asks for the title only for NY vehicles (see What the research found).
+- The insurance card must be unexpired on the visit date, like the photo ID. This is a guess: the research does not say how current it must be. A card whose expiry date is missing or not in YYYY-MM-DD form is flagged "unreadable" and the rep gets the line.
 - Every package needs a certificate of title, and having one is enough (no date rule). This is a guess: MCU's checklist asks for it for NY vehicles, but the synthetic registrations record no state, so LoanReady cannot tell which vehicles are from NY. The title's VIN is compared with the registration and payoff letter, and its name with the other documents.
-- The insurance card's name is not compared with the other documents, because the research does not say whose name must be on the policy. This is also a guess.
+- The insurance card's name is not compared with the other documents, because the research does not say whose name must be on the policy. Its VIN is not compared either, because the research does not say the card must list the vehicle, so a card for another vehicle is not flagged. Both are guesses.
+- An insurance card or title is recognized only by its first non-blank line (for example "AUTO INSURANCE CARD" or "CERTIFICATE OF TITLE"), because other documents often mention them in their text, such as a payoff letter saying the lien on the title will be released. A real card or title with a different first line is left unknown and the rep reads it. For every type, the word that names the document wins over words it only mentions further down. This is a guess about real document layouts.
 - A pay stub counts as stale after 30 days from its issue date. MCU's checklist may not require a pay stub at all; this is being confirmed.
 - A payoff letter is valid through its printed good-through date, counting that day. MCU calls it a "10-Day Payoff Letter". LoanReady does not enforce any issue-age limit, and whether MCU wants one is still to be confirmed.
 - Missing, blank, invalid, ambiguous, or repeated good-through dates require rep review (`unreadable`). No guessed date and no fallback to issue age. The original source line is retained. An issue date in the future or after the good-through date also requires review.
