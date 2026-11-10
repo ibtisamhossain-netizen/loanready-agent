@@ -1,3 +1,5 @@
+> Historical snapshot of the November 4 build session. Counts and setup notes here are out of date: see the README for current results. The planner now loads `.env`, and this work is on `main`.
+
 # November 4 Build Time
 
 Source: Pursuit, November 4, activity 08, Build time!
