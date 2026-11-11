@@ -1,6 +1,10 @@
 # LoanReady
 
-LoanReady helps a credit union rep catch missing, expired, or out-of-date auto-refinance documents while the member is still at the desk. Each flag says what it is based on, such as the date a letter was good through, and every extracted value is shown beside the document line it came from, so the rep can check before asking the member for anything.
+Auto-refinance paperwork is easy to get wrong. A Member Service Representative (MSR) at Municipal Credit Union checks several documents, each with its own date rule. If one is missing, expired, or out of date and nobody notices during the visit, it shows up after the member has left, and the rep has to follow up. That works against the job description's priorities: accurate first-time documentation, loan pipeline follow-ups, and a 95%+ QA target.
+
+LoanReady catches those gaps while the member is still at the desk. Each flag says what it is based on, such as the date a letter was good through, and every extracted value is shown beside the document line it came from, so the rep can check before asking the member for anything.
+
+**Note:** LoanReady was built for a public job posting (Member Service Representative at Municipal Credit Union). MCU is not affiliated with or involved in this project.
 
 The AI never sees member information, never decides anything, and never sends anything. Under the hood it runs as a small set of agents on a shared loop with built-in rule planners. With an API key set, the screen can use Claude to reword the follow-up draft. Claude planners that pick each agent's next step are built and tested, but the screen does not use them yet. Every checklist decision is plain code, the model never sees member details or document text, and nothing is ever sent.
 
@@ -49,6 +53,8 @@ python3 -m venv .venv
 .venv/bin/python -m streamlit run app.py
 ```
 
+Tested on: macOS with Python 3.9.6, in a fresh clone (Nov 11, 2026). Windows and other Python versions are untested.
+
 Pick a sample package and click Check package. To reproduce the labeled results, set Visit date to Nov 4, 2026, the date the samples are labeled for. The screen opens with what to ask the member for, then an editable request draft, then a date ruler showing each document's valid period against the visit, then every extracted field beside its source line. The Open files tab lists every checked package that has not been closed (up to 100), and `.venv/bin/python scripts/seed_open_files.py` adds five samples. Use synthetic documents only.
 
 ## Status
@@ -90,7 +96,7 @@ Sources and demo tests for each story are in [docs/user-stories.md](docs/user-st
 
 The full test suite needs both requirement files. With only `requirements-dev.txt`, the model and screen tests are skipped. The runtime libraries are pinned to the versions the results above were verified with; pytest is a version range.
 
-Offline mode needs no key. For the optional model features, put `ANTHROPIC_API_KEY` and `MODEL_ID=claude-sonnet-5-5` in a local `.env` (see `.env.example`). `.env` is in `.gitignore` and must never be committed. Run `.venv/bin/python test_model.py` to check the key and model; it makes one small API call. The screen's Reword button and `agent.make_planner()` load `.env` themselves. The field-check and open-files model planners expect the variables to already be set in the environment, and nothing in the app or scripts calls them yet.
+Offline mode needs no key. For the optional model features, put `ANTHROPIC_API_KEY` and `MODEL_ID=claude-sonnet-5-5` in a local `.env` (see `.env.example`). `.env` is in `.gitignore` and must never be committed. Run `.venv/bin/python scripts/check_api_key.py` to check the key and model; it makes one small API call. The screen's Reword button and `agent.make_planner()` load `.env` themselves. The field-check and open-files model planners expect the variables to already be set in the environment, and nothing in the app or scripts calls them yet.
 
 ## Scope
 
