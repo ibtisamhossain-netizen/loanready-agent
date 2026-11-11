@@ -1,6 +1,6 @@
 """Live check that the key and model in .env work. Makes one small API call.
 
-    .venv/bin/python test_model.py
+    .venv/bin/python scripts/check_api_key.py
 
 Prints Claude's greeting, or the error type and status. Never prints the key.
 """
@@ -11,7 +11,7 @@ from pathlib import Path
 import anthropic
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).resolve().parent / ".env")
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 missing = [name for name in ("ANTHROPIC_API_KEY", "MODEL_ID") if not os.environ.get(name)]
 if missing:
